@@ -29,6 +29,7 @@ log = get_logger("vector_store")
 
 _chroma_client = None
 _collection = None
+_schema_collection = None
 _ef = None
 
 
@@ -96,6 +97,74 @@ def reset_collection() -> None:
         pass
     _collection = None
     get_vector_collection()
+
+
+def get_schema_collection():
+    """Lazy-load the dedicated collection that stores table 'schema cards'.
+
+    This collection is what powers semantic *table selection*: each row is a
+    natural-language description of one database table, so a question embeds
+    close to the table(s) that can answer it.
+    """
+    global _schema_collection
+    if _schema_collection is not None:
+        return _schema_collection
+
+    get_vector_collection()  # ensures _chroma_client and _ef are initialised
+    settings = get_settings()
+    assert _chroma_client is not None
+    _schema_collection = _chroma_client.get_or_create_collection(
+        name=settings.chroma_schema_collection,
+        embedding_function=_ef,
+        metadata={"hnsw:space": "cosine"},
+    )
+    return _schema_collection
+
+
+def reset_schema_collection() -> None:
+    global _chroma_client, _schema_collection
+    settings = get_settings()
+    if _chroma_client is None:
+        _chroma_client = chromadb.PersistentClient(path=settings.chroma_path)
+    try:
+        _chroma_client.delete_collection(settings.chroma_schema_collection)
+    except Exception:
+        pass
+    _schema_collection = None
+    get_schema_collection()
+
+
+def index_schema_cards(cards: Sequence[Dict[str, str]]) -> int:
+    """Upsert table cards. Each card is ``{"table": str, "text": str}``."""
+    if not cards:
+        return 0
+    col = get_schema_collection()
+    col.upsert(
+        documents=[c["text"] for c in cards],
+        metadatas=[{"table": c["table"]} for c in cards],
+        ids=[f"schema::{c['table']}" for c in cards],
+    )
+    return len(cards)
+
+
+def search_schema_cards(query: str, num_results: int = 5) -> List[Dict[str, Any]]:
+    """Return ``[{"table", "score"}]`` ranked by semantic similarity to query."""
+    col = get_schema_collection()
+    count = col.count()
+    if not count:
+        return []
+    raw = col.query(
+        query_texts=[query],
+        n_results=max(1, min(num_results, count)),
+        include=["metadatas", "distances"],
+    )
+    metas = (raw.get("metadatas") or [[]])[0]
+    dists = (raw.get("distances") or [[]])[0]
+    out: List[Dict[str, Any]] = []
+    for md, dist in zip(metas, dists):
+        sim = float(max(0.0, 1.0 - float(dist) / 2.0))
+        out.append({"table": str((md or {}).get("table", "")), "score": sim})
+    return out
 
 
 def collection_stats() -> Dict[str, Any]:

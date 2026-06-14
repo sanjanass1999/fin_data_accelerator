@@ -23,7 +23,7 @@ except ImportError:
 from app.config import get_settings
 from app.graph import app_graph
 from app.logging_config import get_logger
-from app.utils import evaluation, guardrails
+from app.utils import evaluation, guardrails, table_router
 from app.utils.llm_service import generate_rag_response
 from app.utils.vector_store import (
     collection_stats,
@@ -164,6 +164,23 @@ def search(payload: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Search failure: {exc}")
 
 
+@app.post("/api/v1/route")
+def route(payload: QueryRequest):
+    """Debug endpoint: show which table(s) the agent picks and the SQL it runs.
+
+    Does not call the answer LLM - it only exposes the routing decision so the
+    table-selection logic can be inspected directly.
+    """
+    try:
+        result = table_router.answer_structured(
+            payload.user_query, provider_override=payload.provider
+        )
+        return sanitize_data({"user_query": payload.user_query, **result})
+    except Exception as exc:
+        log.exception("route_failed")
+        raise HTTPException(status_code=500, detail=f"Routing failure: {exc}")
+
+
 @app.post("/api/v1/chat")
 def chat(payload: QueryRequest):
     gate = guardrails.check_input(payload.user_query)
@@ -176,7 +193,26 @@ def chat(payload: QueryRequest):
         })
 
     try:
-        passages = search_financial_docs(payload.user_query, num_results=payload.top_k)
+        # 1) Automatically route the question to the right table(s) and fetch
+        #    the exact rows from the relational database (deterministic truth).
+        routed = table_router.answer_structured(
+            payload.user_query, provider_override=payload.provider
+        )
+        sql_passage = {
+            "text": table_router.format_rows_as_context(routed, query=payload.user_query),
+            "score": 1.0,
+            "source": "relational_db",
+            "metadata": {
+                "selected_tables": routed["selected_tables"],
+                "sql": routed["sql"],
+                "row_count": routed["row_count"],
+            },
+        }
+
+        # 2) Add narrative passages for qualitative grounding (risks, strategy).
+        narrative = search_financial_docs(payload.user_query, num_results=payload.top_k)
+
+        passages = [sql_passage] + narrative
         context = format_context(passages)
 
         llm = generate_rag_response(payload.user_query, context, provider_override=payload.provider)
@@ -195,6 +231,15 @@ def chat(payload: QueryRequest):
             "ai_generated_answer": final_answer,
             "provider_used": llm["provider_used"],
             "providers_tried": llm["providers_tried"],
+            "routing": {
+                "selected_tables": routed["selected_tables"],
+                "ranked_tables": routed["ranked_tables"],
+                "generated_sql": routed["sql"],
+                "sql_strategy": routed["sql_strategy"],
+                "sql_provider": routed["sql_provider"],
+                "rows": routed["rows"],
+                "row_count": routed["row_count"],
+            },
             "sources": [
                 {"text": p["text"], "score": p["score"], "source": p["source"],
                  "metadata": p.get("metadata", {})}

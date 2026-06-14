@@ -1,0 +1,51 @@
+company_id,ticker,company_name,industry_id,hq_country,employees,founded_year
+1,AAPL,Apple Inc.,7,USA,164000,1976
+2,MSFT,Microsoft Corporation,23,USA,228000,1975
+3,GOOGL,Alphabet Inc.,18,USA,182502,1998
+4,NVDA,NVIDIA Corporation,21,USA,29600,1993
+5,AMZN,Amazon.com Inc.,10,USA,1525000,1994
+6,META,Meta Platforms Inc.,22,USA,72404,2004
+7,TSLA,Tesla Inc.,2,USA,140473,2003
+8,JPM,JPMorgan Chase & Co.,3,USA,309926,2000
+9,BAC,Bank of America Corp.,3,USA,212000,1998
+10,WFC,Wells Fargo & Company,3,USA,228000,1852
+11,GS,The Goldman Sachs Group Inc.,5,USA,46500,1869
+12,MS,Morgan Stanley,5,USA,80000,1935
+13,XOM,Exxon Mobil Corporation,19,USA,61500,1870
+14,CVX,Chevron Corporation,19,USA,45700,1879
+15,PFE,Pfizer Inc.,9,USA,88000,1849
+16,JNJ,Johnson & Johnson,9,USA,138100,1886
+17,UNH,UnitedHealth Group Inc.,14,USA,400000,1977
+18,ABBV,AbbVie Inc.,9,USA,50000,2013
+19,WMT,Walmart Inc.,8,USA,2100000,1962
+20,PG,Procter & Gamble Co.,16,USA,107000,1837
+21,KO,The Coca-Cola Company,4,USA,79000,1892
+22,PEP,PepsiCo Inc.,4,USA,318000,1898
+23,DIS,The Walt Disney Company,11,USA,225000,1923
+24,NFLX,Netflix Inc.,11,USA,13000,1997
+25,ADBE,Adobe Inc.,24,USA,30100,1982
+26,CRM,Salesforce Inc.,24,USA,72000,1999
+27,ORCL,Oracle Corporation,25,USA,159000,1977
+28,INTC,Intel Corporation,21,USA,124800,1968
+29,AMD,Advanced Micro Devices,21,USA,26000,1969
+30,QCOM,QUALCOMM Inc.,21,USA,49000,1985
+31,AVGO,Broadcom Inc.,21,USA,20000,1991
+32,ACN,Accenture plc,17,Ireland,774000,1989
+33,IBM,International Business Machines,17,USA,288300,1911
+34,COST,Costco Wholesale Corp.,8,USA,316000,1983
+35,HD,The Home Depot Inc.,15,USA,475000,1978
+36,LOW,Lowe's Companies Inc.,15,USA,285000,1921
+37,NKE,NIKE Inc.,13,USA,79400,1964
+38,SBUX,Starbucks Corporation,20,USA,381000,1971
+39,MCD,McDonald's Corporation,20,USA,150000,1955
+40,TMUS,T-Mobile US Inc.,28,USA,71000,1994
+41,T,AT&T Inc.,28,USA,141200,1885
+42,VZ,Verizon Communications,28,USA,105400,2000
+43,LIN,Linde plc,26,Ireland,66100,1879
+44,APD,Air Products & Chemicals,26,USA,23000,1940
+45,GE,General Electric Co.,27,USA,125000,1892
+46,CAT,Caterpillar Inc.,12,USA,113200,1925
+47,HON,Honeywell International,6,USA,103000,1906
+48,MMM,3M Company,6,USA,85000,1902
+49,LMT,Lockheed Martin Corp.,1,USA,122000,1995
+50,RTX,RTX Corporation,1,USA,185000,1922

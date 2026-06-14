@@ -59,6 +59,14 @@ _FINANCIAL_KEYWORDS = {
     "report", "filing", "10-k", "10-q", "sec", "analyst", "risk",
     "growth", "decline", "increase", "decrease", "compare", "summarise",
     "summarize", "overview", "performance", "metric", "metrics",
+    # relational entities exposed by the table router
+    "employee", "employees", "headcount", "headquarter", "headquarters", "hq",
+    "ceo", "cfo", "executive", "executives", "leadership", "founded",
+    "segment", "segments", "eps", "estimate", "surprise", "roe",
+    "macro", "gdp", "cpi", "inflation", "treasury", "yield",
+    # company names (resolved by the router even without a ticker)
+    "apple", "microsoft", "alphabet", "google", "nvidia", "amazon",
+    "tesla", "walmart", "netflix", "disney", "intel", "broadcom",
     # common tickers from the seed dataset
     "aapl", "msft", "googl", "nvda", "amzn", "meta", "tsla", "jpm",
     "bac", "wfc", "gs", "xom", "cvx", "pfe", "jnj", "wmt", "pg",

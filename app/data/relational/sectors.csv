@@ -1,0 +1,10 @@
+sector_id,sector_name,description
+1,Basic Materials,"Chemicals, mining and materials producers."
+2,Communication Services,"Telecom, media, entertainment and streaming."
+3,Consumer Cyclical,"Discretionary retail, autos, restaurants and apparel."
+4,Consumer Defensive,"Staples, beverages, household products and discount retail."
+5,Energy,Integrated oil & gas and energy producers.
+6,Financial Services,"Banks, capital-markets firms and diversified financials."
+7,Healthcare,"Pharmaceuticals, biotech and managed-care providers."
+8,Industrials,"Aerospace, defense, machinery and diversified industrials."
+9,Technology,"Hardware, software, semiconductors and IT services companies."

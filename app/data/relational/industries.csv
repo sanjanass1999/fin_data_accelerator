@@ -1,0 +1,29 @@
+industry_id,industry_name,sector_id
+1,Aerospace & Defense,8
+2,Auto Manufacturers,3
+3,Banks - Diversified,6
+4,Beverages - Non-Alcoholic,4
+5,Capital Markets,6
+6,Conglomerates,8
+7,Consumer Electronics,9
+8,Discount Stores,4
+9,Drug Manufacturers,7
+10,E-Commerce,3
+11,Entertainment,2
+12,Farm & Heavy Construction,8
+13,Footwear & Accessories,3
+14,Healthcare Plans,7
+15,Home Improvement Retail,3
+16,Household Products,4
+17,IT Services,9
+18,Internet Services,9
+19,Oil & Gas Integrated,5
+20,Restaurants,3
+21,Semiconductors,9
+22,Social Media,9
+23,Software,9
+24,Software - Application,9
+25,Software - Infrastructure,9
+26,Specialty Chemicals,1
+27,Specialty Industrial,8
+28,Telecom Services,2

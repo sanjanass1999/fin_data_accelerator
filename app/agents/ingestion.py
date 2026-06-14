@@ -80,6 +80,8 @@ def ingestion_agent(state: PipelineState) -> dict:
         errors.append(f"File not found: {file_path}")
         return {
             "errors": errors,
+            "is_indexed": False,
+            "indexed_chunks": 0,
             "next_node": "end",
             **_trace(state, started, "failed", "file not found", file_path=file_path),
         }
@@ -126,6 +128,8 @@ def ingestion_agent(state: PipelineState) -> dict:
         errors.append(f"Unsupported file extension: {suffix}")
         return {
             "errors": errors,
+            "is_indexed": False,
+            "indexed_chunks": 0,
             "next_node": "end",
             **_trace(state, started, "failed", f"unsupported extension {suffix}"),
         }
@@ -135,6 +139,8 @@ def ingestion_agent(state: PipelineState) -> dict:
         log.exception("ingestion_failed")
         return {
             "errors": errors,
+            "is_indexed": False,
+            "indexed_chunks": 0,
             "next_node": "end",
             **_trace(state, started, "failed", str(exc)),
         }

@@ -79,21 +79,34 @@ def fs_read(file_name: str) -> Dict[str, Any]:
 
 _PG_TEMPLATES: Dict[str, str] = {
     "ticker_summary": (
-        "SELECT ticker, fiscal_year, revenue, net_income "
-        "FROM company_financials WHERE ticker = :ticker"
+        "SELECT c.ticker, s.fiscal_year, s.revenue, s.net_income "
+        "FROM financial_statements s "
+        "JOIN companies c ON s.company_id = c.company_id "
+        "WHERE c.ticker = :ticker"
+    ),
+    "ticker_margins": (
+        "SELECT c.ticker, r.net_profit_margin_pct, r.operating_margin_pct, r.roe_pct "
+        "FROM financial_ratios r "
+        "JOIN financial_statements s ON r.statement_id = s.statement_id "
+        "JOIN companies c ON s.company_id = c.company_id "
+        "WHERE c.ticker = :ticker"
     ),
     "sector_top": (
-        "SELECT ticker, revenue, net_income FROM company_financials "
-        "WHERE sector = :sector ORDER BY revenue DESC LIMIT 5"
+        "SELECT c.ticker, s.revenue, s.net_income "
+        "FROM financial_statements s "
+        "JOIN companies c ON s.company_id = c.company_id "
+        "JOIN industries i ON c.industry_id = i.industry_id "
+        "JOIN sectors sec ON i.sector_id = sec.sector_id "
+        "WHERE sec.sector_name = :sector ORDER BY s.revenue DESC LIMIT 5"
     ),
-    "company_count": "SELECT COUNT(*) AS n FROM company_financials",
+    "company_count": "SELECT COUNT(*) AS n FROM companies",
 }
 
 
 def pg_query(template: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    """Run one of the pre-vetted SQL templates with parameter binding."""
+    """Run one of the pre-vetted SQL templates against the relational database."""
     started = time.time()
-    params = params or {}
+    params = dict(params or {})
     if template not in _PG_TEMPLATES:
         audit_record("pg.query", "deny",
                      {"template": template, "params": params},
@@ -102,57 +115,63 @@ def pg_query(template: str, params: Dict[str, Any] | None = None) -> Dict[str, A
                 "allowed": sorted(_PG_TEMPLATES.keys())}
 
     sql = _PG_TEMPLATES[template]
+    if "ticker" in params and params["ticker"]:
+        params["ticker"] = str(params["ticker"]).upper()
+
     settings = get_settings()
-    if not settings.postgres_url:
-        # Demo mode – return shaped, deterministic results from the seed CSV.
-        result = _pg_demo(template, params)
+    if settings.postgres_url:
+        try:                                               # pragma: no cover
+            import psycopg                                 # type: ignore
+
+            with psycopg.connect(settings.postgres_url, autocommit=True) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    cols = [c.name for c in cur.description] if cur.description else []
+                    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+            audit_record("pg.query", "allow",
+                         {"template": template, "params": params},
+                         f"{len(rows)} rows", int((time.time() - started) * 1000))
+            return {"ok": True, "mode": "live", "sql": sql, "params": params, "rows": rows}
+        except Exception as exc:
+            audit_record("pg.query", "error",
+                         {"template": template, "params": params}, str(exc),
+                         int((time.time() - started) * 1000))
+            return {"ok": False, "error": "pg_failure", "detail": str(exc)}
+
+    # Default: run the template against the local SQLite relational database.
+    try:
+        from app.utils import sql_db
+
+        rows, executed = sql_db.run_select(sql, params=params)
         audit_record("pg.query", "allow",
                      {"template": template, "params": params},
-                     f"demo {len(result)} rows",
-                     int((time.time() - started) * 1000))
-        return {"ok": True, "mode": "demo", "sql": sql, "params": params, "rows": result}
-
-    try:                                                   # pragma: no cover
-        import psycopg                                     # type: ignore
-
-        with psycopg.connect(settings.postgres_url, autocommit=True) as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, params)
-                cols = [c.name for c in cur.description] if cur.description else []
-                rows = [dict(zip(cols, r)) for r in cur.fetchall()]
-        audit_record("pg.query", "allow",
-                     {"template": template, "params": params},
-                     f"{len(rows)} rows", int((time.time() - started) * 1000))
-        return {"ok": True, "mode": "live", "sql": sql, "params": params, "rows": rows}
+                     f"sqlite {len(rows)} rows", int((time.time() - started) * 1000))
+        return {"ok": True, "mode": "sqlite", "sql": executed, "params": params, "rows": rows}
     except Exception as exc:
         audit_record("pg.query", "error",
                      {"template": template, "params": params}, str(exc),
                      int((time.time() - started) * 1000))
-        return {"ok": False, "error": "pg_failure", "detail": str(exc)}
+        return {"ok": False, "error": "sqlite_failure", "detail": str(exc)}
 
 
-def _pg_demo(template: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Read the seed CSV in process to power the demo Postgres responses."""
-    import pandas as pd
+def sql_select(sql: str, limit: int = 50) -> Dict[str, Any]:
+    """Run an arbitrary but *validated* read-only SELECT against the database.
 
-    csv_path = os.path.join(os.path.dirname(__file__), "data", "sample_companies.csv")
-    if not os.path.exists(csv_path):
-        return []
-    df = pd.read_csv(csv_path)
+    The statement is passed through the same SELECT-only safety validation used
+    by the table router (no writes, no DDL, single statement, known tables).
+    """
+    started = time.time()
+    try:
+        from app.utils import sql_db
 
-    if template == "ticker_summary":
-        ticker = (params.get("ticker") or "").upper()
-        sub = df[df["ticker"] == ticker][["ticker", "fiscal_year", "revenue", "net_income"]]
-        return sub.to_dict(orient="records")
-    if template == "sector_top":
-        sector = params.get("sector") or ""
-        sub = (df[df["sector"].str.lower() == sector.lower()]
-               .sort_values("revenue", ascending=False)
-               .head(5)[["ticker", "revenue", "net_income"]])
-        return sub.to_dict(orient="records")
-    if template == "company_count":
-        return [{"n": int(len(df))}]
-    return []
+        rows, executed = sql_db.run_select(sql, limit=limit)
+        audit_record("sql.select", "allow", {"sql": sql[:200]},
+                     f"{len(rows)} rows", int((time.time() - started) * 1000))
+        return {"ok": True, "sql": executed, "rows": rows}
+    except Exception as exc:
+        audit_record("sql.select", "deny", {"sql": sql[:200]}, str(exc),
+                     int((time.time() - started) * 1000))
+        return {"ok": False, "error": "invalid_or_unsafe_sql", "detail": str(exc)}
 
 
 def s3_fetch(document_id: str) -> Dict[str, Any]:
@@ -216,10 +235,17 @@ TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "fn": fs_read,
     },
     "pg.query": {
-        "description": "Run one of the pre-approved PostgreSQL templates with parameter binding.",
-        "params": {"template": "ticker_summary | sector_top | company_count",
+        "description": "Run one of the pre-approved SQL templates (parameter-bound) "
+                       "against the relational database.",
+        "params": {"template": "ticker_summary | ticker_margins | sector_top | company_count",
                    "params": "dict"},
         "fn": pg_query,
+    },
+    "sql.select": {
+        "description": "Run a validated, read-only SELECT against the relational "
+                       "database. Writes/DDL and unknown tables are rejected.",
+        "params": {"sql": "string (a single SELECT statement)", "limit": "int"},
+        "fn": sql_select,
     },
     "s3.fetch": {
         "description": "Fetch a financial-report object from the enterprise S3 bucket via assumed-role IAM.",
@@ -263,6 +289,10 @@ def _build_mcp():                                          # pragma: no cover
     @mcp.tool()
     def pg_query_tool(template: str, params: Dict[str, Any] | None = None) -> str:
         return json.dumps(pg_query(template, params))
+
+    @mcp.tool()
+    def sql_select_tool(sql: str, limit: int = 50) -> str:
+        return json.dumps(sql_select(sql, limit))
 
     @mcp.tool()
     def s3_fetch_tool(document_id: str) -> str:

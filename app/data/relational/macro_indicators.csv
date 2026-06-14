@@ -1,0 +1,6 @@
+indicator_id,name,period,value,unit,description
+1,US Real GDP Growth,2025E,2.0,%,Consensus US real GDP growth for 2025.
+2,US Headline CPI,2025E,2.5,%,Headline CPI moderating toward target.
+3,Fed Funds Upper Bound,2025E,3.5,%,Expected year-end 2025 Fed Funds upper bound.
+4,10Y Treasury Yield,2025E,4.4,%,Expected rangebound 10-year Treasury yield.
+5,S&P 500 EPS Growth,2025E,12.0,%,Consensus S&P 500 earnings growth for 2025.

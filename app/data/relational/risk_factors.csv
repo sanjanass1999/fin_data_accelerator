@@ -1,0 +1,115 @@
+risk_id,company_id,fiscal_year,risk_category,description
+1,1,2024,Product Concentration,"iPhone still accounts for over half of total revenue, concentrating results in a single product line."
+2,1,2024,Supply Chain,Dependence on a small number of contract manufacturers in mainland China and Vietnam.
+3,1,2024,Regulatory,App Store regulatory risk under the EU Digital Markets Act and ongoing US antitrust litigation.
+4,1,2024,Foreign Exchange,"Roughly 60% of revenue is generated outside the United States, exposing results to FX volatility."
+5,1,2024,AI Execution,Risk of delivering Apple Intelligence features at the cadence promised at WWDC 2024.
+6,2,2024,AI Capacity,GPU capacity demand continues to outpace supply through at least the first half of FY2025.
+7,2,2024,Partner Dependence,Heavy dependence on the OpenAI partnership exposes Microsoft to model availability and pricing changes.
+8,2,2024,Regulatory,Scrutiny around the Activision Blizzard acquisition and bundling of Teams with Office in the EU.
+9,2,2024,Cybersecurity,Cybersecurity exposure following the 2023 Storm-0558 incident.
+10,2,2024,Foreign Exchange,About half of revenue is generated outside the US.
+11,3,2024,Competition,Intense competition and rapid technological change can compress margins.
+12,3,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+13,4,2024,Customer Concentration,Top three hyperscaler customers contributed roughly 40% of Data Center revenue.
+14,4,2024,Export Controls,"US export controls restrict sales of advanced GPUs to China, historically ~20% of Data Center revenue."
+15,4,2024,Competition,"Competitive risk from AMD MI300, Intel Gaudi, and in-house custom silicon at hyperscalers."
+16,4,2024,Supply Chain,Supply-chain concentration on TSMC for leading-edge wafers.
+17,4,2024,Demand Normalization,Demand normalization risk as the first wave of generative AI training capex matures.
+18,5,2024,Demand,Discretionary demand is sensitive to the consumer-spending cycle.
+19,5,2024,Competition,Pricing pressure from low-cost and online competitors.
+20,6,2024,Competition,Intense competition and rapid technological change can compress margins.
+21,6,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+22,7,2024,Demand,Discretionary demand is sensitive to the consumer-spending cycle.
+23,7,2024,Competition,Pricing pressure from low-cost and online competitors.
+24,8,2024,Credit,Provisions for credit losses can rise as consumer delinquencies normalize.
+25,8,2024,Interest Rate,Net interest income is sensitive to the rate cycle and deposit beta.
+26,8,2024,Regulatory,Capital and liquidity requirements constrain balance-sheet flexibility.
+27,9,2024,Credit,Provisions for credit losses can rise as consumer delinquencies normalize.
+28,9,2024,Interest Rate,Net interest income is sensitive to the rate cycle and deposit beta.
+29,9,2024,Regulatory,Capital and liquidity requirements constrain balance-sheet flexibility.
+30,10,2024,Credit,Provisions for credit losses can rise as consumer delinquencies normalize.
+31,10,2024,Interest Rate,Net interest income is sensitive to the rate cycle and deposit beta.
+32,10,2024,Regulatory,Capital and liquidity requirements constrain balance-sheet flexibility.
+33,11,2024,Credit,Provisions for credit losses can rise as consumer delinquencies normalize.
+34,11,2024,Interest Rate,Net interest income is sensitive to the rate cycle and deposit beta.
+35,11,2024,Regulatory,Capital and liquidity requirements constrain balance-sheet flexibility.
+36,12,2024,Credit,Provisions for credit losses can rise as consumer delinquencies normalize.
+37,12,2024,Interest Rate,Net interest income is sensitive to the rate cycle and deposit beta.
+38,12,2024,Regulatory,Capital and liquidity requirements constrain balance-sheet flexibility.
+39,13,2024,Commodity Price,Earnings are highly sensitive to Brent and WTI crude price swings.
+40,13,2024,Regulatory,Climate regulation and emissions policy create long-term demand uncertainty.
+41,14,2024,Commodity Price,Earnings are highly sensitive to Brent and WTI crude price swings.
+42,14,2024,Regulatory,Climate regulation and emissions policy create long-term demand uncertainty.
+43,15,2024,Patent Cliff,Loss of exclusivity on key drugs exposes revenue to biosimilar/generic erosion.
+44,15,2024,Regulatory,Drug pricing reform and FDA approval risk affect the pipeline.
+45,16,2024,Patent Cliff,Loss of exclusivity on key drugs exposes revenue to biosimilar/generic erosion.
+46,16,2024,Regulatory,Drug pricing reform and FDA approval risk affect the pipeline.
+47,17,2024,Patent Cliff,Loss of exclusivity on key drugs exposes revenue to biosimilar/generic erosion.
+48,17,2024,Regulatory,Drug pricing reform and FDA approval risk affect the pipeline.
+49,18,2024,Patent Cliff,Loss of exclusivity on key drugs exposes revenue to biosimilar/generic erosion.
+50,18,2024,Regulatory,Drug pricing reform and FDA approval risk affect the pipeline.
+51,19,2024,Input Costs,Commodity and freight inflation can pressure gross margins.
+52,19,2024,Demand,Volume softness in developing markets as pricing actions are absorbed.
+53,20,2024,Input Costs,Commodity and freight inflation can pressure gross margins.
+54,20,2024,Demand,Volume softness in developing markets as pricing actions are absorbed.
+55,21,2024,Input Costs,Commodity and freight inflation can pressure gross margins.
+56,21,2024,Demand,Volume softness in developing markets as pricing actions are absorbed.
+57,22,2024,Input Costs,Commodity and freight inflation can pressure gross margins.
+58,22,2024,Demand,Volume softness in developing markets as pricing actions are absorbed.
+59,23,2024,Competition,Streaming and telecom markets face intense subscriber competition.
+60,23,2024,Capital Intensity,Network and content investment requires sustained heavy capex.
+61,24,2024,Competition,Streaming and telecom markets face intense subscriber competition.
+62,24,2024,Capital Intensity,Network and content investment requires sustained heavy capex.
+63,25,2024,Competition,Intense competition and rapid technological change can compress margins.
+64,25,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+65,26,2024,Competition,Intense competition and rapid technological change can compress margins.
+66,26,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+67,27,2024,Competition,Intense competition and rapid technological change can compress margins.
+68,27,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+69,28,2024,Competition,Intense competition and rapid technological change can compress margins.
+70,28,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+71,29,2024,Competition,Intense competition and rapid technological change can compress margins.
+72,29,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+73,30,2024,Competition,Intense competition and rapid technological change can compress margins.
+74,30,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+75,31,2024,Competition,Intense competition and rapid technological change can compress margins.
+76,31,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+77,32,2024,Competition,Intense competition and rapid technological change can compress margins.
+78,32,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+79,33,2024,Competition,Intense competition and rapid technological change can compress margins.
+80,33,2024,Talent,Reliance on attracting and retaining scarce engineering talent.
+81,34,2024,Input Costs,Commodity and freight inflation can pressure gross margins.
+82,34,2024,Demand,Volume softness in developing markets as pricing actions are absorbed.
+83,35,2024,Demand,Discretionary demand is sensitive to the consumer-spending cycle.
+84,35,2024,Competition,Pricing pressure from low-cost and online competitors.
+85,36,2024,Demand,Discretionary demand is sensitive to the consumer-spending cycle.
+86,36,2024,Competition,Pricing pressure from low-cost and online competitors.
+87,37,2024,Demand,Discretionary demand is sensitive to the consumer-spending cycle.
+88,37,2024,Competition,Pricing pressure from low-cost and online competitors.
+89,38,2024,Demand,Discretionary demand is sensitive to the consumer-spending cycle.
+90,38,2024,Competition,Pricing pressure from low-cost and online competitors.
+91,39,2024,Demand,Discretionary demand is sensitive to the consumer-spending cycle.
+92,39,2024,Competition,Pricing pressure from low-cost and online competitors.
+93,40,2024,Competition,Streaming and telecom markets face intense subscriber competition.
+94,40,2024,Capital Intensity,Network and content investment requires sustained heavy capex.
+95,41,2024,Competition,Streaming and telecom markets face intense subscriber competition.
+96,41,2024,Capital Intensity,Network and content investment requires sustained heavy capex.
+97,42,2024,Competition,Streaming and telecom markets face intense subscriber competition.
+98,42,2024,Capital Intensity,Network and content investment requires sustained heavy capex.
+99,43,2024,Commodity Price,Input and output prices are exposed to commodity cycles.
+100,43,2024,Regulatory,Environmental and emissions regulation increases compliance costs.
+101,44,2024,Commodity Price,Input and output prices are exposed to commodity cycles.
+102,44,2024,Regulatory,Environmental and emissions regulation increases compliance costs.
+103,45,2024,Cyclicality,Demand is tied to capital-investment and defense-budget cycles.
+104,45,2024,Supply Chain,Complex supply chains expose production to component shortages.
+105,46,2024,Cyclicality,Demand is tied to capital-investment and defense-budget cycles.
+106,46,2024,Supply Chain,Complex supply chains expose production to component shortages.
+107,47,2024,Cyclicality,Demand is tied to capital-investment and defense-budget cycles.
+108,47,2024,Supply Chain,Complex supply chains expose production to component shortages.
+109,48,2024,Cyclicality,Demand is tied to capital-investment and defense-budget cycles.
+110,48,2024,Supply Chain,Complex supply chains expose production to component shortages.
+111,49,2024,Cyclicality,Demand is tied to capital-investment and defense-budget cycles.
+112,49,2024,Supply Chain,Complex supply chains expose production to component shortages.
+113,50,2024,Cyclicality,Demand is tied to capital-investment and defense-budget cycles.
+114,50,2024,Supply Chain,Complex supply chains expose production to component shortages.

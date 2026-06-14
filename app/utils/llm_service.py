@@ -59,6 +59,43 @@ def build_user_prompt(query: str, context: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# NL2SQL prompt (table routing -> SQL generation)
+# --------------------------------------------------------------------------- #
+
+
+SQL_SYSTEM_PROMPT = textwrap.dedent(
+    """
+    You are a precise SQLite text-to-SQL generator for a financial database.
+
+    Strict rules:
+    1. Output ONLY a single SQLite SELECT statement. No prose, no explanation,
+       no markdown fences, no trailing semicolon.
+    2. Use ONLY the tables and columns provided in the SCHEMA block. Never
+       invent tables or columns.
+    3. Resolve a ticker or company name by JOINing through the `companies`
+       table using the foreign keys shown in the SCHEMA.
+    4. For margins / ratios use `financial_ratios` joined via
+       `financial_statements`. For raw dollar amounts use
+       `financial_statements`.
+    5. Always SELECT a human-readable identifier (e.g. companies.ticker or
+       companies.company_name) alongside the requested value.
+    6. Add ORDER BY and LIMIT when the question implies "highest", "top",
+       "largest", "most", etc.
+    7. If the question cannot be answered from the schema, output exactly:
+       SELECT 'unanswerable' AS note
+    """
+).strip()
+
+
+def build_sql_prompt(query: str, schema_snippet: str) -> str:
+    return (
+        f"SCHEMA:\n{schema_snippet}\n\n"
+        f"QUESTION: {query}\n\n"
+        f"SQLITE SELECT:"
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Provider implementations
 # --------------------------------------------------------------------------- #
 
@@ -241,3 +278,109 @@ def generate_rag_response(
         "provider_used": "none",
         "providers_tried": tried,
     }
+
+
+# --------------------------------------------------------------------------- #
+# NL2SQL generation
+# --------------------------------------------------------------------------- #
+
+
+_SQL_FENCE = re.compile(r"```(?:sql)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
+
+
+def _provider_complete(provider: str, system_prompt: str, user_prompt: str) -> Optional[str]:
+    """Generic single-shot completion used by the NL2SQL path."""
+    settings = get_settings()
+    try:
+        if provider == "groq":
+            if not settings.groq_api_key:
+                return None
+            from openai import OpenAI
+
+            client = OpenAI(base_url="https://api.groq.com/openai/v1",
+                            api_key=settings.groq_api_key)
+            resp = client.chat.completions.create(
+                model=settings.groq_model,
+                temperature=0.0,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            return resp.choices[0].message.content
+        if provider == "gemini":
+            if not settings.gemini_api_key:
+                return None
+            import google.generativeai as genai
+
+            genai.configure(api_key=settings.gemini_api_key)
+            model = genai.GenerativeModel(
+                model_name=settings.gemini_model, system_instruction=system_prompt
+            )
+            resp = model.generate_content(user_prompt)
+            return getattr(resp, "text", None)
+        if provider == "ollama":
+            import ollama  # type: ignore
+
+            client = ollama.Client(host=settings.ollama_base_url)
+            resp = client.chat(
+                model=settings.ollama_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                options={"temperature": 0.0},
+            )
+            return resp.get("message", {}).get("content")
+    except Exception as exc:
+        log.warning("nl2sql provider failed", extra={"provider": provider, "error": str(exc)})
+        return None
+    return None
+
+
+def _extract_sql(raw: str) -> Optional[str]:
+    if not raw:
+        return None
+    fenced = _SQL_FENCE.search(raw)
+    candidate = fenced.group(1) if fenced else raw
+    candidate = candidate.strip()
+    # Keep from the first SELECT/WITH onwards.
+    m = re.search(r"\b(select|with)\b", candidate, re.IGNORECASE)
+    if not m:
+        return None
+    candidate = candidate[m.start():].strip()
+    if candidate.endswith(";"):
+        candidate = candidate[:-1].strip()
+    return candidate or None
+
+
+def generate_sql(
+    query: str,
+    schema_snippet: str,
+    provider_override: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Generate a SQLite SELECT for ``query`` grounded in ``schema_snippet``.
+
+    Returns ``{"sql", "provider_used", "providers_tried"}``. ``sql`` is ``None``
+    when no real LLM provider is available (offline / no API keys); in that case
+    the table router falls back to its deterministic template builder.
+    """
+    settings = get_settings()
+    primary = (provider_override or settings.primary_provider or "").lower()
+    fallback = (settings.fallback_provider or "").lower()
+
+    order: List[str] = []
+    for p in (primary, fallback):
+        if p in ("groq", "gemini", "ollama") and p not in order:
+            order.append(p)
+
+    user_prompt = build_sql_prompt(query, schema_snippet)
+    tried: List[str] = []
+    for p in order:
+        tried.append(p)
+        raw = _provider_complete(p, SQL_SYSTEM_PROMPT, user_prompt)
+        sql = _extract_sql(raw or "")
+        if sql:
+            return {"sql": sql, "provider_used": p, "providers_tried": tried}
+
+    return {"sql": None, "provider_used": "none", "providers_tried": tried}

@@ -1,5 +1,5 @@
 ticker,company_name,sector,industry,fiscal_year,revenue,net_income,operating_income,total_assets,total_liabilities,employees,hq_country
-AAPL,Apple Inc.,Technology,Consumer Electronics,2024,uh,93736,123216,364980,308030,164000,USA
+AAPL,Apple Inc.,Technology,Consumer Electronics,2024,391035,93736,123216,364980,308030,164000,USA
 MSFT,Microsoft Corporation,Technology,Software,2024,245100,88136,109443,512163,243686,228000,USA
 GOOGL,Alphabet Inc.,Technology,Internet Services,2024,350018,100118,118203,450019,124302,182502,USA
 NVDA,NVIDIA Corporation,Technology,Semiconductors,2024,118000,55000,67000,96000,28000,29600,USA

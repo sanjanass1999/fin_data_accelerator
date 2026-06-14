@@ -55,6 +55,14 @@ class Settings:
     chroma_collection: str = field(
         default_factory=lambda: _env("CHROMA_COLLECTION", "findata_financial_docs")
     )
+    chroma_schema_collection: str = field(
+        default_factory=lambda: _env("CHROMA_SCHEMA_COLLECTION", "findata_schema_cards")
+    )
+
+    # --- Relational source (SQLite) ---
+    sqlite_path: str = field(
+        default_factory=lambda: _env("SQLITE_PATH", "./app/data/findata.db")
+    )
 
     # --- Retrieval tuning ---
     retrieval_top_k: int = field(default_factory=lambda: _env_int("RETRIEVAL_TOP_K", 6))
