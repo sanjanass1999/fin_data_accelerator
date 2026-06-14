@@ -1,0 +1,51 @@
+ticker,company_name,sector,industry,fiscal_year,revenue,net_income,operating_income,total_assets,total_liabilities,employees,hq_country
+AAPL,Apple Inc.,Technology,Consumer Electronics,2024,uh,93736,123216,364980,308030,164000,USA
+MSFT,Microsoft Corporation,Technology,Software,2024,245100,88136,109443,512163,243686,228000,USA
+GOOGL,Alphabet Inc.,Technology,Internet Services,2024,350018,100118,118203,450019,124302,182502,USA
+NVDA,NVIDIA Corporation,Technology,Semiconductors,2024,118000,55000,67000,96000,28000,29600,USA
+AMZN,Amazon.com Inc.,Consumer Cyclical,E-Commerce,2024,637959,59248,68593,624894,338919,1525000,USA
+META,Meta Platforms Inc.,Technology,Social Media,2024,164501,62360,76700,229623,75066,72404,USA
+TSLA,Tesla Inc.,Consumer Cyclical,Auto Manufacturers,2024,97690,7130,7600,122070,48390,140473,USA
+JPM,JPMorgan Chase & Co.,Financial Services,Banks - Diversified,2024,177425,58471,69000,3875000,3537000,309926,USA
+BAC,Bank of America Corp.,Financial Services,Banks - Diversified,2024,103768,27132,33000,3260000,2970000,212000,USA
+WFC,Wells Fargo & Company,Financial Services,Banks - Diversified,2024,82295,19142,24500,1932000,1738000,228000,USA
+GS,The Goldman Sachs Group Inc.,Financial Services,Capital Markets,2024,53510,14280,17200,1675000,1551000,46500,USA
+MS,Morgan Stanley,Financial Services,Capital Markets,2024,61130,13390,16500,1218000,1117000,80000,USA
+XOM,Exxon Mobil Corporation,Energy,Oil & Gas Integrated,2024,344582,33680,49800,453475,210000,61500,USA
+CVX,Chevron Corporation,Energy,Oil & Gas Integrated,2024,193414,17681,25400,259900,109000,45700,USA
+PFE,Pfizer Inc.,Healthcare,Drug Manufacturers,2024,63627,8031,11000,217000,113000,88000,USA
+JNJ,Johnson & Johnson,Healthcare,Drug Manufacturers,2024,88820,14066,21000,182000,98000,138100,USA
+UNH,UnitedHealth Group Inc.,Healthcare,Healthcare Plans,2024,400278,15526,23800,298278,202000,400000,USA
+ABBV,AbbVie Inc.,Healthcare,Drug Manufacturers,2024,56334,4278,15800,135000,127000,50000,USA
+WMT,Walmart Inc.,Consumer Defensive,Discount Stores,2024,648125,15511,27000,252399,166000,2100000,USA
+PG,Procter & Gamble Co.,Consumer Defensive,Household Products,2024,84039,14879,18500,122000,71000,107000,USA
+KO,The Coca-Cola Company,Consumer Defensive,Beverages - Non-Alcoholic,2024,46559,10714,13500,99500,71000,79000,USA
+PEP,PepsiCo Inc.,Consumer Defensive,Beverages - Non-Alcoholic,2024,91471,9578,13800,100000,75000,318000,USA
+DIS,The Walt Disney Company,Communication Services,Entertainment,2024,91361,4972,11100,196219,98300,225000,USA
+NFLX,Netflix Inc.,Communication Services,Entertainment,2024,33723,5407,7000,48000,28000,13000,USA
+ADBE,Adobe Inc.,Technology,Software - Application,2024,21505,7763,8400,29260,15800,30100,USA
+CRM,Salesforce Inc.,Technology,Software - Application,2024,34857,4136,5300,98850,40000,72000,USA
+ORCL,Oracle Corporation,Technology,Software - Infrastructure,2024,52961,10467,15100,134384,124200,159000,USA
+INTC,Intel Corporation,Technology,Semiconductors,2024,54228,1689,-100,191728,107000,124800,USA
+AMD,Advanced Micro Devices,Technology,Semiconductors,2024,25700,1270,1900,67950,12500,26000,USA
+QCOM,QUALCOMM Inc.,Technology,Semiconductors,2024,38962,10142,11600,55000,30000,49000,USA
+AVGO,Broadcom Inc.,Technology,Semiconductors,2024,51574,11936,15300,167000,99000,20000,USA
+ACN,Accenture plc,Technology,IT Services,2024,64900,7440,10300,55000,27000,774000,Ireland
+IBM,International Business Machines,Technology,IT Services,2024,62753,7502,9900,135252,113200,288300,USA
+COST,Costco Wholesale Corp.,Consumer Defensive,Discount Stores,2024,254453,7367,10000,69830,46500,316000,USA
+HD,The Home Depot Inc.,Consumer Cyclical,Home Improvement Retail,2024,152669,15143,21500,76530,73000,475000,USA
+LOW,Lowe's Companies Inc.,Consumer Cyclical,Home Improvement Retail,2024,86377,7700,12100,40750,48400,285000,USA
+NKE,NIKE Inc.,Consumer Cyclical,Footwear & Accessories,2024,51362,5700,6800,38110,21500,79400,USA
+SBUX,Starbucks Corporation,Consumer Cyclical,Restaurants,2024,36176,3760,5900,32000,38000,381000,USA
+MCD,McDonald's Corporation,Consumer Cyclical,Restaurants,2024,25920,8462,12200,52000,53600,150000,USA
+TMUS,T-Mobile US Inc.,Communication Services,Telecom Services,2024,81400,8323,15800,210000,144000,71000,USA
+T,AT&T Inc.,Communication Services,Telecom Services,2024,122430,12369,21500,408000,300000,141200,USA
+VZ,Verizon Communications,Communication Services,Telecom Services,2024,134788,12095,22600,378000,288000,105400,USA
+LIN,Linde plc,Basic Materials,Specialty Chemicals,2024,33000,6500,8900,82000,34000,66100,Ireland
+APD,Air Products & Chemicals,Basic Materials,Specialty Chemicals,2024,12100,3600,4500,32000,20000,23000,USA
+GE,General Electric Co.,Industrials,Specialty Industrial,2024,68660,9481,10500,176000,118000,125000,USA
+CAT,Caterpillar Inc.,Industrials,Farm & Heavy Construction,2024,67050,10135,13000,87000,69000,113200,USA
+HON,Honeywell International,Industrials,Conglomerates,2024,36670,5660,7200,62000,46000,103000,USA
+MMM,3M Company,Industrials,Conglomerates,2024,32700,4930,6000,50500,41000,85000,USA
+LMT,Lockheed Martin Corp.,Industrials,Aerospace & Defense,2024,71040,5750,8000,55700,49600,122000,USA
+RTX,RTX Corporation,Industrials,Aerospace & Defense,2024,80740,4774,6700,162000,109000,185000,USA

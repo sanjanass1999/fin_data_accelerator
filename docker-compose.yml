@@ -1,0 +1,38 @@
+services:
+  api_gateway:
+    build: .
+    container_name: findata_api_gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - LLM_PRIMARY_PROVIDER=${LLM_PRIMARY_PROVIDER:-groq}
+      - LLM_FALLBACK_PROVIDER=${LLM_FALLBACK_PROVIDER:-simulation}
+      - CHROMA_PATH=/workspace/chroma_db
+      - PREFECT_API_URL=http://prefect_server:4200/api
+    volumes:
+      - ./chroma_db:/workspace/chroma_db
+      - ./app/data:/workspace/app/data
+    networks:
+      - findata_network
+    depends_on:
+      - prefect_server
+    command: >
+      sh -c "python scripts/seed_data.py &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  prefect_server:
+    image: prefecthq/prefect:3-python3.11
+    container_name: findata_prefect_orchestrator
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200"
+    environment:
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+    networks:
+      - findata_network
+
+networks:
+  findata_network:
+    driver: bridge

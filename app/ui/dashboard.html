@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FinDataAccelerator — Gen AI Data Platform</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+    .scroll-thin::-webkit-scrollbar { width: 12px; height: 12px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background: #475569; border-radius: 8px; }
+    .fade-in { animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .pulse-dot { animation: pulse 1.6s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 text-2xl tracking-normal antialiased">
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+const API = {
+  async post(path, body) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  },
+  async get(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  },
+};
+
+function Badge({ children, color }) {
+  const map = {
+    green: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    blue: 'bg-blue-100 text-blue-800 border-blue-300',
+    amber: 'bg-amber-100 text-amber-800 border-amber-300',
+    red: 'bg-rose-100 text-rose-800 border-rose-300',
+    slate: 'bg-slate-100 text-slate-700 border-slate-300',
+    indigo: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  };
+  return <span className={`px-4 py-2 text-xl font-bold rounded-full border-2 shadow-sm ${map[color] || map.slate}`}>{children}</span>;
+}
+
+function Metric({ label, value, color, sub }) {
+  const pct = Math.round((value || 0) * 100);
+  const bar = { green: 'bg-emerald-500', blue: 'bg-blue-500', indigo: 'bg-indigo-500', amber: 'bg-amber-500' }[color] || 'bg-slate-500';
+  const txt = { green: 'text-emerald-700', blue: 'text-blue-700', indigo: 'text-indigo-700', amber: 'text-amber-700' }[color] || 'text-slate-700';
+  return (
+    <div className="bg-white rounded-2xl border-2 border-slate-200 p-8 shadow-md">
+      <div className="flex justify-between items-end">
+        <span className="text-xl font-black text-slate-500 uppercase tracking-wider">{label}</span>
+        <span className={`text-5xl font-black ${txt}`}>{pct}%</span>
+      </div>
+      <div className="h-5 mt-4 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
+        <div className={`h-full ${bar} rounded-full transition-all duration-700`} style={{ width: pct + '%' }} />
+      </div>
+      {sub && <p className="text-base text-slate-400 font-bold mt-3 leading-snug">{sub}</p>}
+    </div>
+  );
+}
+
+function ChatTab() {
+  const [query, setQuery] = useState('');
+  const [log, setLog] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [metrics, setMetrics] = useState(null);
+  const endRef = useRef(null);
+
+  const samples = [
+    'Which technology companies had the highest net profit margin in 2024?',
+    "Summarise NVIDIA's key risk factors.",
+    'Compare the net profit margins of JPMorgan, Bank of America and Wells Fargo.',
+    'What is the FY2025 macro outlook for interest rates?',
+  ];
+
+  useEffect(() => { endRef.current && endRef.current.scrollIntoView({ behavior: 'smooth' }); }, [log, loading]);
+
+  const ask = async (q) => {
+    const question = (q || query).trim();
+    if (!question) return;
+    setLog((p) => [...p, { role: 'user', text: question }]);
+    setQuery('');
+    setLoading(true);
+    try {
+      const res = await API.post('/api/v1/chat', { user_query: question });
+      if (res.blocked) {
+        setLog((p) => [...p, { role: 'blocked', text: res.message, rule: res.guardrail_rule }]);
+      } else {
+        setLog((p) => [...p, {
+          role: 'ai', text: res.ai_generated_answer, sources: res.sources || [],
+          provider: res.provider_used, grounded: res.output_guardrail && res.output_guardrail.grounded_ratio,
+        }]);
+        setMetrics(res.evaluation ? res.evaluation.metrics : null);
+      }
+    } catch (e) {
+      setLog((p) => [...p, { role: 'error', text: 'Gateway error: ' + e.message }]);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-260px)] gap-8 items-stretch">
+      <div className="flex flex-col flex-1 bg-white rounded-3xl border-2 border-slate-200 shadow-md overflow-hidden">
+        <div className="px-8 py-6 border-b-2 border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div>
+            <h2 className="text-3xl font-black text-slate-900">RAG Chat Copilot</h2>
+            <p className="text-lg font-bold text-slate-400 mt-0.5">Grounded answers with citations + guardrails</p>
+          </div>
+          <Badge color="indigo">ChromaDB + MMR retrieval</Badge>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-8 space-y-6 scroll-thin bg-slate-50/20">
+          {log.length === 0 && (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6">
+              <p className="text-3xl font-black mb-8 text-slate-700">Ask anything about the indexed financials</p>
+              <div className="grid grid-cols-1 gap-4 max-w-4xl w-full">
+                {samples.map((s, i) => (
+                  <button key={i} onClick={() => ask(s)} className="text-left text-xl bg-white border-2 border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/30 rounded-2xl px-6 py-5 font-bold transition shadow-sm text-slate-700 leading-relaxed transform active:scale-[0.99]">{s}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {log.map((m, i) => (
+            <div key={i} className={`flex fade-in ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] rounded-3xl px-8 py-5 shadow-sm border-2 text-2xl leading-relaxed ${
+                m.role === 'user' ? 'bg-indigo-600 text-white border-indigo-700 font-medium' :
+                m.role === 'blocked' ? 'bg-rose-50 border-rose-300 text-rose-800 font-bold shadow-inner' :
+                m.role === 'error' ? 'bg-amber-50 border-amber-300 text-amber-800 font-bold' :
+                'bg-white border-slate-200 text-slate-800 font-medium'}`}>
+                {m.role === 'blocked' && <div className="text-lg font-black uppercase mb-2 tracking-wider text-rose-700 flex items-center gap-2">⚠️ Guardrail blocked · {m.rule}</div>}
+                <div className="whitespace-pre-wrap">{m.text}</div>
+                {m.role === 'ai' && (
+                  <div className="mt-4 flex flex-wrap gap-2.5 items-center">
+                    {typeof m.provider === 'string' && <Badge color="slate">via {m.provider}</Badge>}
+                    {typeof m.grounded === 'number' && <Badge color={m.grounded > 0.4 ? 'green' : 'amber'}>grounding {Math.round(m.grounded * 100)}%</Badge>}
+                  </div>
+                )}
+                {m.sources && m.sources.length > 0 && (
+                  <div className="mt-6 space-y-4 pt-4 border-t-2 border-slate-100">
+                    <div className="text-sm font-black text-slate-400 uppercase tracking-wider">Source Provenance Telemetry:</div>
+                    {m.sources.map((s, j) => (
+                      <div key={j} className="text-lg bg-slate-50 border-l-8 border-indigo-500 rounded-r-xl px-5 py-4 text-slate-600 shadow-sm">
+                        <div className="font-black text-xl text-slate-800 flex justify-between items-center">
+                          <span>[{j + 1}] {s.source}</span>
+                          <span className="bg-slate-200/60 px-3 py-1 rounded-lg text-sm font-mono text-indigo-700">Similarity: {(s.score || 0).toFixed(2)}</span>
+                        </div>
+                        <div className="mt-2 text-lg leading-relaxed font-medium">{s.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start fade-in">
+              <div className="bg-white border-2 border-slate-200 rounded-2xl px-6 py-4 shadow-sm flex gap-2 items-center">
+                <span className="w-4 h-4 bg-indigo-500 rounded-full pulse-dot" />
+                <span className="w-4 h-4 bg-indigo-500 rounded-full pulse-dot" style={{ animationDelay: '0.2s' }} />
+                <span className="w-4 h-4 bg-indigo-500 rounded-full pulse-dot" style={{ animationDelay: '0.4s' }} />
+              </div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+        
+        <div className="p-6 border-t-2 border-slate-200 flex gap-4 bg-white shadow-lg items-center">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && ask()}
+            placeholder="Ask about revenue, margins, risks, sectors..."
+            className="flex-1 px-6 py-5 bg-slate-50 border-2 border-slate-300 rounded-2xl text-2xl font-bold focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 transition text-slate-900 placeholder-slate-400" />
+          <button onClick={() => ask()} disabled={loading || !query}
+            className="px-10 py-5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black rounded-2xl text-2xl transition active:scale-95 shadow-md h-full">Ask</button>
+        </div>
+      </div>
+      
+      {/* RIGHT SIDEBAR PANEL - EXPLICIT TELEMETRY UPSCALING */}
+      <div className="w-[480px] flex-shrink-0 flex flex-col gap-5 overflow-y-auto pr-1">
+        <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-md border-2 border-slate-950">
+          <h3 className="text-2xl font-black flex items-center gap-2 uppercase tracking-wide text-indigo-400">RAGAS Evaluation</h3>
+          <p className="text-base font-bold text-slate-400 mt-1.5 leading-normal">Real-time validation parameters of the final operational trace context window.</p>
+        </div>
+        {metrics ? (
+          <div className="space-y-4 flex-1">
+            <Metric label="Faithfulness" value={metrics.faithfulness_score} color="green" sub="answer claims supported by context" />
+            <Metric label="Answer Relevancy" value={metrics.answer_relevancy_score} color="blue" sub="similarity to the question" />
+            <Metric label="Context Precision" value={metrics.context_precision_score} color="indigo" sub="rank-weighted retrieval quality" />
+            <Metric label="Citation Coverage" value={metrics.citation_coverage_score} color="amber" sub="valid [n] citations" />
+            <div className="bg-white rounded-3xl border-2 border-slate-200 p-6 text-center shadow-md">
+              <div className="text-sm text-slate-400 uppercase font-black tracking-wider">Overall Execution Trust Score</div>
+              <div className="text-6xl font-black text-slate-800 mt-2">{Math.round(metrics.overall_score * 100)}%</div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 bg-white rounded-3xl border-4 border-dashed border-slate-300 p-10 text-center text-slate-400 font-bold text-xl flex items-center justify-center bg-white shadow-inner leading-relaxed">
+            Execute an active data query parameter to compute validation metric frameworks.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PipelineTab() {
+  const [filePath, setFilePath] = useState('app/data/sample_companies.csv');
+  const [running, setRunning] = useState(false);
+  const [traces, setTraces] = useState([]);
+  const [result, setResult] = useState(null);
+
+  const agents = [
+    { key: 'ingestion', label: 'Ingestion', desc: 'CSV / Parquet / PDF / JSON' },
+    { key: 'quality', label: 'Quality Check', desc: 'Schema + validation' },
+    { key: 'transform', label: 'Transform Logic', desc: 'Ratios + narratives' },
+    { key: 'rag', label: 'RAG Indexing', desc: 'Embed into ChromaDB' },
+  ];
+
+  const run = async () => {
+    setRunning(true); setTraces([]); setResult(null);
+    try {
+      const res = await API.post('/api/v1/pipeline/run', { file_path: filePath });
+      setTraces(res.agent_traces || []);
+      setResult(res);
+    } catch (e) {
+      setResult({ error: e.message });
+    }
+    setRunning(false);
+  };
+
+  const traceFor = (k) => traces.find((t) => t.agent === k);
+  const statusColor = (s) => ({ ok: 'green', warning: 'amber', failed: 'red', skipped: 'slate' }[s] || 'slate');
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl border-2 border-slate-200 shadow-md p-8">
+        <h2 className="text-3xl font-black">4-Agent LangGraph Pipeline</h2>
+        <p className="text-lg text-slate-400 mt-1 mb-6">Ingestion → Quality → Transform → RAG, orchestrated by Prefect flows</p>
+        <div className="flex gap-4">
+          <input value={filePath} onChange={(e) => setFilePath(e.target.value)}
+            className="flex-1 px-6 py-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-xl font-mono font-bold focus:outline-none focus:ring-4 focus:ring-indigo-100" />
+          <button onClick={run} disabled={running}
+            className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black rounded-xl text-xl transition active:scale-95 shadow-md">
+            {running ? 'Running...' : 'Run Pipeline'}</button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {agents.map((a, i) => {
+          const t = traceFor(a.key);
+          const active = running && !t;
+          return (
+            <div key={a.key} className={`relative bg-white rounded-3xl border-2 p-6 shadow-md transition ${t ? 'border-slate-200' : active ? 'border-indigo-400 bg-indigo-50/10' : 'border-slate-100 opacity-70'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <span className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 font-black text-2xl flex items-center justify-center shadow-sm">{i + 1}</span>
+                {t ? <Badge color={statusColor(t.status)}>{t.status}</Badge> : active ? <Badge color="indigo">running</Badge> : <Badge color="slate">idle</Badge>}
+              </div>
+              <h3 className="text-2xl font-black text-slate-800">{a.label}</h3>
+              <p className="text-base text-slate-400 mt-1 font-medium">{a.desc}</p>
+              {t && (
+                <div className="mt-4 text-base bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1 font-bold">
+                  <div className="text-slate-600">{t.summary}</div>
+                  <div className="text-indigo-600 font-mono text-sm mt-1">{t.duration_ms} ms runtime execution</div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {result && (
+        <div className="bg-white rounded-3xl border-2 border-slate-200 shadow-md p-8 fade-in">
+          <h3 className="text-2xl font-black mb-4">Execution Summary</h3>
+          {result.error ? <p className="text-rose-600 font-bold text-xl">{result.error}</p> : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-base font-bold">
+              <div className="bg-slate-50 p-4 rounded-xl border-2"><div className="text-slate-400 text-xs uppercase tracking-wider">Indexed State</div><div className="text-2xl font-black text-slate-800 mt-1">{result.is_indexed ? 'Yes' : 'No'}</div></div>
+              <div className="bg-slate-50 p-4 rounded-xl border-2"><div className="text-slate-400 text-xs uppercase tracking-wider">Chunks added</div><div className="text-2xl font-black text-slate-800 mt-1">{result.indexed_chunks || 0}</div></div>
+              <div className="bg-slate-50 p-4 rounded-xl border-2"><div className="text-slate-400 text-xs uppercase tracking-wider">Warnings Out</div><div className="text-2xl font-black text-amber-600 mt-1">{(result.warnings || []).length}</div></div>
+              <div className="bg-slate-50 p-4 rounded-xl border-2"><div className="text-slate-400 text-xs uppercase tracking-wider">Errors Out</div><div className="text-2xl font-black text-rose-600 mt-1">{(result.errors || []).length}</div></div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function McpTab() {
+  const [tools, setTools] = useState([]);
+  const [audit, setAudit] = useState([]);
+  const [out, setOut] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    try {
+      const t = await API.get('/api/v1/mcp/tools');
+      setTools(t.tools || []);
+      const a = await API.get('/api/v1/mcp/audit');
+      setAudit(a.audit || []);
+    } catch (e) { /* ignore */ }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const presets = {
+    'fs.read': { file_name: 'sample_companies.csv' },
+    'pg.query': { template: 'sector_top', params: { sector: 'Technology' } },
+    's3.fetch': { document_id: 'NVDA_FY24_summary' },
+    'kb.search': { query: 'highest net profit margin technology', top_k: 3 },
+  };
+
+  const invoke = async (name) => {
+    setBusy(true); setOut(null);
+    try {
+      const res = await API.post('/api/v1/mcp/invoke', { tool: name, arguments: presets[name] || {} });
+      setOut({ name, res });
+    } catch (e) { setOut({ name, res: { error: e.message } }); }
+    await refresh();
+    setBusy(false);
+  };
+
+  const stColor = (s) => ({ allow: 'green', deny: 'red', error: 'amber' }[s] || 'slate');
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="space-y-4">
+        <div className="bg-white rounded-3xl border-2 border-slate-200 shadow-md p-8">
+          <h2 className="text-3xl font-black">MCP Infrastructure Connectors</h2>
+          <p className="text-base text-slate-400 font-bold mt-1 mb-6">Decoupled data layer tooling with automated authorization filters</p>
+          <div className="space-y-4">
+            {tools.map((t) => (
+              <div key={t.name} className="border-2 border-slate-200 rounded-2xl p-5 bg-slate-50/60 shadow-sm flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <code className="font-bold text-2xl text-indigo-600 block">{t.name}</code>
+                  <p className="text-base text-slate-500 font-bold">{t.description}</p>
+                </div>
+                <button onClick={() => invoke(t.name)} disabled={busy}
+                  className="px-6 py-3 text-lg bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-black rounded-xl transition shadow-sm">Invoke</button>
+              </div>
+            ))}
+          </div>
+        </div>
+        {out && (
+          <div className="bg-slate-900 text-slate-100 rounded-3xl p-6 shadow-xl border-2 border-slate-800 fade-in">
+            <div className="text-sm text-indigo-400 mb-2 font-black uppercase tracking-wider">{out.name} runtime output ledger:</div>
+            <pre className="text-base overflow-x-auto scroll-thin whitespace-pre-wrap font-mono bg-slate-950 p-4 rounded-xl border border-slate-800">{JSON.stringify(out.res, null, 2)}</pre>
+          </div>
+        )}
+      </div>
+      <div className="bg-white rounded-3xl border-2 border-slate-200 shadow-md p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-3xl font-black">Zero-Trust Operational Audit Logs</h2>
+          <button onClick={refresh} className="text-base font-black text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2 hover:underline transition shadow-sm">Refresh Audit Ledger</button>
+        </div>
+        <div className="space-y-3 max-h-[32rem] overflow-y-auto scroll-thin pr-1">
+          {audit.length === 0 && <p className="text-lg text-slate-400 font-bold py-10 text-center bg-slate-50 border-2 border-dashed rounded-xl">No infrastructure requests captured in this security context frame.</p>}
+          {audit.slice().reverse().map((a, i) => (
+            <div key={i} className="flex items-center gap-4 border-2 border-slate-100 rounded-xl px-4 py-3 text-lg font-bold shadow-sm bg-slate-50/30 fade-in">
+              <Badge color={stColor(a.status)}>{a.status}</Badge>
+              <code className="font-black text-slate-800 text-xl">{a.tool}</code>
+              <span className="text-slate-400 font-mono font-bold ml-auto">{a.latency_ms} ms</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function KnowledgeTab() {
+  const [stats, setStats] = useState(null);
+  const [q, setQ] = useState('net profit margin');
+  const [hits, setHits] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => { try { setStats(await API.get('/api/v1/kb/stats')); } catch (e) {} };
+  useEffect(() => { load(); }, []);
+
+  const search = async () => {
+    setBusy(true);
+    try { const r = await API.post('/api/v1/search', { user_query: q }); setHits(r.results || []); }
+    catch (e) { setHits([]); }
+    setBusy(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-3xl border-2 border-slate-200 p-6 shadow-md">
+          <div className="text-xs uppercase font-black text-slate-400 tracking-wider">Total Collection Chunks</div>
+          <div className="text-5xl font-black text-indigo-600 mt-2">{stats ? stats.chunks : '—'}</div>
+        </div>
+        {stats && Object.entries(stats.sources || {}).slice(0, 3).map(([k, v]) => (
+          <div key={k} className="bg-white rounded-3xl border-2 border-slate-200 p-6 shadow-md">
+            <div className="text-xs uppercase font-black text-slate-400 truncate tracking-wider">{k}</div>
+            <div className="text-5xl font-black text-slate-800 mt-2">{v}</div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-white rounded-3xl border-2 border-slate-200 shadow-md p-8">
+        <h2 className="text-3xl font-black mb-4">Raw Vector Database Subspace Inspector</h2>
+        <div className="flex gap-4 mb-6">
+          <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && search()}
+            className="flex-1 px-4 py-4 bg-slate-50 border-2 border-slate-300 rounded-xl font-mono text-xl font-bold focus:outline-none focus:ring-4 focus:ring-indigo-100" />
+          <button onClick={search} disabled={busy} className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black rounded-xl text-xl transition shadow-md">Vector Search</button>
+        </div>
+        <div className="space-y-4">
+          {hits.map((h, i) => (
+            <div key={i} className="border-2 border-slate-200 bg-slate-50/30 rounded-2xl p-6 shadow-sm fade-in space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge color="indigo"> Blended Score: {(h.score || 0).toFixed(3)}</Badge>
+                <span className="text-sm font-black text-slate-400">{h.source} {h.metadata && h.metadata.ticker ? '· Ticker Target: ' + h.metadata.ticker : ''}</span>
+              </div>
+              <p className="text-xl text-slate-700 font-semibold bg-white p-4 rounded-xl border border-slate-200 leading-relaxed shadow-inner">{h.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [tab, setTab] = useState('chat');
+  const [health, setHealth] = useState(null);
+  const [guardrails, setGuardrails] = useState([]);
+
+  useEffect(() => {
+    API.get('/api/v1/health').then(setHealth).catch(() => {});
+    API.get('/api/v1/guardrails').then((g) => setGuardrails(g.guardrails || [])).catch(() => {});
+  }, []);
+
+  const tabs = [
+    { id: 'chat', label: 'RAG Chat Control' },
+    { id: 'pipeline', label: 'Pipeline Ingestion' },
+    { id: 'knowledge', label: 'Knowledge Base Index' },
+    { id: 'mcp', label: 'MCP Middleware' },
+  ];
+
+  return (
+    <div className="h-screen flex flex-col bg-slate-100 overflow-hidden">
+      <header className="bg-white border-b-2 border-slate-200 px-10 py-6 flex items-center justify-between flex-shrink-0 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-500 flex items-center justify-center text-white font-black text-3xl shadow-md">F</div>
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900">FinData<span className="text-indigo-600">Accelerator</span></h1>
+            <p className="text-base font-bold text-slate-400 mt-0.5">Generative AI Enterprise Data Orchestration Platform</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          {guardrails.length > 0 && <Badge color="green">{guardrails.length} Security Guardrails Armed</Badge>}
+          <div className="flex items-center gap-3 bg-slate-50 border px-5 py-2.5 rounded-full shadow-inner">
+            <span className="w-4 h-4 rounded-full bg-emerald-500 pulse-dot" />
+            <span className="text-base font-black text-emerald-600 uppercase tracking-wider">{health ? 'Operational' : 'Connecting Engine'}</span>
+          </div>
+        </div>
+      </header>
+      <nav className="bg-white border-b-2 border-slate-200 px-10 flex gap-2 flex-shrink-0">
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`px-8 py-5 text-xl font-black border-b-4 transition ${tab === t.id ? 'border-indigo-600 text-indigo-600 bg-indigo-50/40' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{t.label}</button>
+        ))}
+      </nav>
+      <main className="flex-1 p-8 bg-slate-100 overflow-hidden">
+        {tab === 'chat' && <ChatTab />}
+        {tab === 'pipeline' && <PipelineTab />}
+        {tab === 'knowledge' && <KnowledgeTab />}
+        {tab === 'mcp' && <McpTab />}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
