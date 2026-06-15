@@ -130,7 +130,8 @@ _ASC_WORDS = ("lowest", "least", "smallest", "worst", "bottom", "min", "minimum"
 
 _FS_METRICS = {
     "revenue": ["revenue", "sales", "top line", "turnover"],
-    "net_income": ["net income", "profit", "earnings", "bottom line", "net profit"],
+    "net_income": ["net income", "profit", "earnings", "bottom line", "net profit",
+                   "profitable", "profitability"],
     "operating_income": ["operating income", "operating profit"],
     "gross_profit": ["gross profit"],
     "total_assets": ["total assets", "assets"],

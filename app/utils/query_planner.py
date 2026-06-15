@@ -65,7 +65,8 @@ _METRIC_TABLE: Dict[str, str] = {
 # "segment revenue" beat "revenue").
 _METRIC_PHRASES: Dict[str, List[str]] = {
     "revenue": ["revenue", "sales", "top line", "turnover"],
-    "net_income": ["net income", "net profit", "bottom line", "profit", "earnings"],
+    "net_income": ["net income", "net profit", "bottom line", "profit", "earnings",
+                   "profitable", "profitability"],
     "operating_income": ["operating income", "operating profit"],
     "gross_profit": ["gross profit"],
     "total_assets": ["total assets", "assets"],
@@ -127,6 +128,7 @@ class QuerySpec:
     metric_table: Optional[str] = None
     dimension: Optional[str] = None              # fiscal_year|segment_name|sector_name|industry_name|fiscal_quarter
     aggregation: Optional[str] = None            # avg|sum|count
+    operation: Optional[str] = None              # spread (MAX - MIN across rows)
     year: Optional[int] = None
     quarter: Optional[str] = None
     sector: Optional[str] = None
@@ -162,7 +164,16 @@ def _detect_dimension(low: str) -> Optional[str]:
         return "sector_name"
     if re.search(r"\b(by|per|each)\s+industry\b", low):
         return "industry_name"
-    if re.search(r"\byears?\b", low) or re.search(r"\b(annual|yearly)\b", low):
+    # A specific 4-digit year ("in 2024", "the year 2024") is a *filter*, not a
+    # breakdown axis. Only treat the year as a dimension for genuine
+    # across-years phrasing (a per-year breakdown / trend / plural "years").
+    has_specific_year = bool(re.search(r"\b(19|20)\d{2}\b", low))
+    if (re.search(r"\b(by|per|each)\s+years?\b", low)
+            or re.search(r"\b(annual|annually|yearly)\b", low)
+            or re.search(r"\bover the years\b", low)
+            or re.search(r"\byear[\s-]over[\s-]year\b", low)
+            or re.search(r"\btrend\b", low)
+            or (re.search(r"\byears\b", low) and not has_specific_year)):
         return "fiscal_year"
     return None
 
@@ -177,8 +188,29 @@ def _detect_aggregation(low: str) -> Optional[str]:
     return None
 
 
+def _detect_spread(low: str) -> bool:
+    """True when the question asks for the gap between two metric extremes.
+
+    Matches explicit phrasing ("difference/gap/spread between ...") as well as a
+    paired superlative ("most ... least", "highest ... lowest") that implies a
+    range rather than a single ranking.
+    """
+    if re.search(r"\b(difference|gap|spread|range)\s+between\b", low):
+        return True
+    has_high = any(w in low for w in _DESC_SPREAD_WORDS)
+    has_low = any(w in low for w in _ASC_SPREAD_WORDS)
+    return has_high and has_low
+
+
+_DESC_SPREAD_WORDS = ("most", "highest", "largest", "biggest", "top", "best", "greatest")
+_ASC_SPREAD_WORDS = ("least", "lowest", "smallest", "bottom", "worst")
+
+
 def _detect_intent(low: str, entities: List[str], metric: Optional[str],
-                   aggregation: Optional[str], direction: Optional[str]) -> str:
+                   aggregation: Optional[str], direction: Optional[str],
+                   operation: Optional[str] = None) -> str:
+    if operation == "spread":
+        return "spread"
     if aggregation in ("avg", "sum", "count"):
         return "aggregate"
     if direction:
@@ -222,11 +254,14 @@ def extract_spec(query: str) -> QuerySpec:
     # (e.g. "Bank of America" should not also add a Financial Services filter).
     if entities:
         sector = None
-    intent = _detect_intent(low, entities, metric, aggregation, direction)
+    operation = "spread" if _detect_spread(low) else None
+    intent = _detect_intent(low, entities, metric, aggregation, direction, operation)
 
     # A ranked / year-dimensioned / avg|sum question without an explicit metric
-    # defaults to revenue (a sensible proxy for "best"/"biggest").
-    if metric_table is None and (dimension == "fiscal_year" or direction or aggregation in ("avg", "sum")):
+    # defaults to revenue (a sensible proxy for "best"/"biggest"). A spread
+    # question must keep a real detected metric rather than silently degrade.
+    if (metric_table is None and operation != "spread"
+            and (dimension == "fiscal_year" or direction or aggregation in ("avg", "sum"))):
         metric, metric_table = "revenue", "financial_statements"
 
     limit = _resolve_limit(query, intent, direction)
@@ -238,6 +273,7 @@ def extract_spec(query: str) -> QuerySpec:
         metric_table=metric_table,
         dimension=dimension,
         aggregation=aggregation,
+        operation=operation,
         year=year,
         quarter=quarter,
         sector=sector,
@@ -419,6 +455,25 @@ def compile_spec(spec: QuerySpec) -> Optional[str]:
         where.append(f"{year_alias}.fiscal_year = {int(spec.year)}")
     if spec.quarter and table == "earnings_events":
         where.append(f"e.fiscal_quarter = '{spec.quarter}'")
+
+    # Spread: the gap between the metric's two extremes across the matched rows,
+    # naming the leading and trailing companies and the difference itself.
+    if spec.operation == "spread" and metric_expr:
+        inner_from = f"FROM {base} " + " ".join(joins)
+        if need_company_sector:
+            inner_from += (" JOIN industries i ON c.industry_id = i.industry_id "
+                           "JOIN sectors sec ON i.sector_id = sec.sector_id")
+        where_clause = (" WHERE " + " AND ".join(where)) if where else ""
+        scope = f"{inner_from}{where_clause}"
+        m = spec.metric
+        return (
+            "SELECT "
+            f"(SELECT c.company_name {scope} ORDER BY {metric_expr} DESC LIMIT 1) AS most_{m}_company, "
+            f"(SELECT ROUND(MAX({metric_expr}), 2) {scope}) AS highest_{m}, "
+            f"(SELECT c.company_name {scope} ORDER BY {metric_expr} ASC LIMIT 1) AS least_{m}_company, "
+            f"(SELECT ROUND(MIN({metric_expr}), 2) {scope}) AS lowest_{m}, "
+            f"(SELECT ROUND(MAX({metric_expr}) - MIN({metric_expr}), 2) {scope}) AS {m}_difference"
+        )
 
     select: List[str] = []
     group: List[str] = []

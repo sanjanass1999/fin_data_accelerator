@@ -49,6 +49,28 @@ def test_extract_aggregation_avg_by_sector():
     assert spec.intent == "aggregate"
 
 
+def test_extract_profitable_maps_to_net_income():
+    # "most profitable" is a net-income question, not a revenue ranking.
+    spec = qp.extract_spec("most profitable company in 2024")
+    assert spec.metric == "net_income"
+    assert spec.metric_table == "financial_statements"
+    assert spec.year == 2024
+
+
+def test_extract_spread_operation_and_metric():
+    spec = qp.extract_spec(
+        "what is the difference between the most profitable and the least "
+        "profitable company in the year 2024"
+    )
+    assert spec.operation == "spread"
+    assert spec.intent == "spread"
+    # Must keep the real metric, never silently degrade to revenue.
+    assert spec.metric == "net_income"
+    # "the year 2024" is a filter, not a per-year breakdown.
+    assert spec.dimension is None
+    assert spec.year == 2024
+
+
 def test_plan_returns_none_for_non_metric_question():
     # Qualitative questions are left to the legacy templates.
     assert qp.plan("who is the CEO of apple", provider_override="simulation") is None
@@ -74,6 +96,30 @@ def test_compile_aggregate_has_group_by():
     assert "GROUP BY sec.sector_name" in sql
     assert "AVG(r.net_profit_margin_pct)" in sql
     assert "ROUND(" in sql
+
+
+def test_compile_spread_emits_max_minus_min():
+    spec = qp.extract_spec(
+        "difference between the most profitable and least profitable company in 2024"
+    )
+    sql = qp.compile_spec(spec)
+    assert "MAX(s.net_income) - MIN(s.net_income)" in sql
+    assert "WHERE s.fiscal_year = 2024" in sql
+    assert "most_net_income_company" in sql
+    assert "least_net_income_company" in sql
+    # The whole thing must validate + run as a single read-only SELECT.
+    from app.utils import sql_db
+    rows, _ = sql_db.run_select(sql, limit=5)
+    assert rows and "net_income_difference" in rows[0]
+
+
+def test_spread_has_no_misleading_coverage_note():
+    spec = qp.extract_spec(
+        "difference between the most profitable and least profitable company in the year 2024"
+    )
+    spec, note = qp.check_coverage(spec)
+    # Year is a filter here, so the "can't compare across years" note must not fire.
+    assert note is None
 
 
 def test_compile_compare_filters_entities():
