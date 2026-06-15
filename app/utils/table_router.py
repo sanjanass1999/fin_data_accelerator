@@ -496,6 +496,125 @@ def _row_phrase(row: Dict[str, Any]) -> str:
     return f"{ident}: {body}" if ident else body
 
 
+# --------------------------------------------------------------------------- #
+# Natural-language answer rendering (clean, user-facing)
+# --------------------------------------------------------------------------- #
+
+# Columns that label a row rather than carry a measured value.
+_LABEL_KEYS = (
+    "company_name", "ticker", "sector_name", "industry_name", "segment_name",
+    "name", "fiscal_year", "fiscal_quarter", "report_date", "event_type",
+)
+# Monetary columns are stored in millions of USD.
+_MONETARY_COLS = {
+    "revenue", "net_income", "operating_income", "gross_profit", "total_assets",
+    "total_liabilities", "free_cash_flow", "capex", "segment_revenue",
+    "revenue_actual",
+}
+
+
+def _humanize_label(col: str) -> str:
+    """Turn a column name into a readable phrase (``net_profit_margin_pct`` ->
+    ``net profit margin``)."""
+    label = col[:-4] if col.endswith("_pct") else col
+    return label.replace("_", " ").strip()
+
+
+def _humanize_value(col: str, value: Any) -> str:
+    """Format a value with its natural unit (% for ratios, $M for money)."""
+    if col.endswith("_pct"):
+        return f"{value}%"
+    if col in _MONETARY_COLS:
+        try:
+            return f"${float(value):,.0f}M"
+        except (TypeError, ValueError):
+            return f"${value}M"
+    return str(value)
+
+
+def _row_label(row: Dict[str, Any]) -> Optional[str]:
+    """Human-readable identifier for a row, e.g. ``JPMorgan Chase & Co. (JPM)``."""
+    name = row.get("company_name")
+    ticker = row.get("ticker")
+    if name and ticker:
+        return f"{name} ({ticker})"
+    if name:
+        return str(name)
+    if ticker:
+        return str(ticker)
+    for key in ("segment_name", "sector_name", "industry_name", "name"):
+        if row.get(key):
+            return str(row[key])
+    return None
+
+
+def _metric_pairs(row: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """Extract ``(label, value)`` measurement pairs from a row."""
+    pairs: List[Tuple[str, str]] = []
+    for key, val in row.items():
+        if key in _LABEL_KEYS or key.endswith("_id") or val in (None, ""):
+            continue
+        pairs.append((_humanize_label(key), _humanize_value(key, val)))
+    return pairs
+
+
+def _join_clauses(items: List[str]) -> str:
+    items = [i for i in items if i]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def rows_to_answer(result: Dict[str, Any], query: Optional[str] = None) -> Optional[str]:
+    """Render fetched rows as a clean, natural-language answer.
+
+    Returns ``None`` when there are no rows, so the caller can fall back to the
+    narrative passages. This is intentionally free of any SQL / table telemetry
+    -- that diagnostic detail is surfaced separately by the caller.
+    """
+    rows = result.get("rows") or []
+    if not rows:
+        return None
+
+    per_row = [(_row_label(r), _metric_pairs(r)) for r in rows[:25]]
+    per_row = [(label, pairs) for label, pairs in per_row if pairs]
+    if not per_row:
+        return None
+
+    # Optional fiscal-year context when every row shares the same year.
+    years = {r.get("fiscal_year") for r in rows[:25] if r.get("fiscal_year")}
+    year_prefix = f"In FY{next(iter(years))}, " if len(years) == 1 else ""
+
+    # Case A: a single shared metric across all rows -> a comparison sentence.
+    metric_labels = {tuple(label for label, _ in pairs) for _, pairs in per_row}
+    single_shared = (
+        len(metric_labels) == 1 and len(next(iter(metric_labels))) == 1
+    )
+    if single_shared:
+        metric = next(iter(metric_labels))[0]
+        if len(per_row) == 1:
+            label, pairs = per_row[0]
+            value = pairs[0][1]
+            who = label or "The company"
+            return f"{year_prefix}{who} has a {metric} of {value}.".strip()
+        clauses = [
+            f"{label or 'company'} {pairs[0][1]}" for label, pairs in per_row
+        ]
+        heading = metric[0].upper() + metric[1:]
+        return f"{year_prefix}{heading} by company: {_join_clauses(clauses)}.".strip()
+
+    # Case B: general multi-metric rows -> one clause per row.
+    clauses = []
+    for label, pairs in per_row:
+        metrics = ", ".join(f"{lbl} {val}" for lbl, val in pairs)
+        clauses.append(f"{label}: {metrics}" if label else metrics)
+    return f"{year_prefix}{'; '.join(clauses)}.".strip()
+
+
 def format_rows_as_context(result: Dict[str, Any], query: Optional[str] = None) -> str:
     """Render fetched rows as a grounded, citation-friendly context block.
 

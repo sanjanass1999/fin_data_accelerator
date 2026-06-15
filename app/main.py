@@ -198,14 +198,19 @@ def chat(payload: QueryRequest):
         routed = table_router.answer_structured(
             payload.user_query, provider_override=payload.provider
         )
+        # Clean, natural-language rendering of the rows for grounding + answer.
+        # All SQL/table telemetry is kept out of this text and surfaced
+        # separately under "routing" so the answer itself stays readable.
+        db_answer = table_router.rows_to_answer(routed, query=payload.user_query)
         sql_passage = {
-            "text": table_router.format_rows_as_context(routed, query=payload.user_query),
+            "text": db_answer or "The database returned no matching rows for this query.",
             "score": 1.0,
             "source": "relational_db",
             "metadata": {
                 "selected_tables": routed["selected_tables"],
                 "sql": routed["sql"],
                 "row_count": routed["row_count"],
+                "rows": routed["rows"][:25],
             },
         }
 
@@ -215,7 +220,12 @@ def chat(payload: QueryRequest):
         passages = [sql_passage] + narrative
         context = format_context(passages)
 
-        llm = generate_rag_response(payload.user_query, context, provider_override=payload.provider)
+        llm = generate_rag_response(
+            payload.user_query,
+            context,
+            provider_override=payload.provider,
+            primary_answer=db_answer,
+        )
         answer = llm["answer"]
 
         out_check = guardrails.check_output(

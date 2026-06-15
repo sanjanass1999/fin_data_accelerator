@@ -194,40 +194,114 @@ def _score_sentence(sentence: str, q_terms: set) -> float:
     return overlap + 0.4 * digits
 
 
-def _simulate(query: str, context: str) -> str:
-    """Extractive reasoner: pulls the most relevant sentences and cites them."""
+# Question intents that call for prose pulled from the narrative passages
+# rather than a single database figure.
+_QUALITATIVE = (
+    "risk", "risks", "outlook", "strategy", "guidance", "macro", "why",
+    "explain", "describe", "summary", "summarise", "summarize", "overview",
+    "driver", "drivers", "headwind", "tailwind", "factor", "factors",
+)
+# Intents whose answer reads best as a short list.
+_LIST_INTENT = ("risk", "factor", "driver", "headwind", "tailwind", "segment", "list")
+
+
+def _split_blocks(context: str) -> List[Dict[str, str]]:
+    """Split a numbered context string into ``{num, header, body}`` blocks."""
+    blocks: List[Dict[str, str]] = []
+    for block in re.split(r"\n\n+", context.strip()):
+        m = re.match(r"^\[(\d+)\]([^\n]*)", block)
+        num = m.group(1) if m else ""
+        header = m.group(2) if m else ""
+        body = re.sub(r"^\[\d+\][^\n]*\n?", "", block, count=1)
+        blocks.append({"num": num, "header": header, "body": body})
+    return blocks
+
+
+def _relational_cite(blocks: List[Dict[str, str]]) -> str:
+    for b in blocks:
+        if "source=relational_db" in b["header"] and b["num"]:
+            return f"[{b['num']}]"
+    return ""
+
+
+def _collect_sentences(blocks: List[Dict[str, str]], q_terms: set) -> List[tuple]:
+    """Score narrative sentences by query overlap, skipping the DB block."""
+    scored: List[tuple] = []
+    seen: set = set()
+    for b in blocks:
+        if "source=relational_db" in b["header"]:
+            continue
+        cite = f"[{b['num']}]" if b["num"] else ""
+        for sent in _SENTENCE_SPLIT.split(b["body"]):
+            sent = sent.strip()
+            if len(sent) < 20 or "[SQL]" in sent:
+                continue
+            # Skip title/heading fragments (e.g. "FY2024 Key Risk Factors")
+            # which carry no real prose -- they lack lowercase content words.
+            if len(re.findall(r"\b[a-z]{3,}\b", sent)) < 2:
+                continue
+            key = sent.lower()
+            if key in seen:
+                continue
+            score = _score_sentence(sent, q_terms)
+            if score > 0:
+                seen.add(key)
+                scored.append((score, sent, cite))
+    scored.sort(reverse=True, key=lambda x: x[0])
+    return scored
+
+
+def _simulate(query: str, context: str, primary_answer: Optional[str] = None) -> str:
+    """Offline reasoner that returns a clean, direct answer.
+
+    Strategy:
+      * Quantitative questions with a database answer -> return that answer
+        verbatim (already natural language), with a single provenance citation.
+      * Qualitative questions (risks, outlook, strategy ...) -> stitch the most
+        relevant narrative sentences into a short, readable response.
+
+    No SQL/table telemetry ever leaks into the prose; that lives in the
+    separate provenance panel.
+    """
+    ql = query.lower()
     q_terms = {w.lower() for w in _WORD.findall(query)} - _stopwords()
     if not q_terms:
         q_terms = {w.lower() for w in _WORD.findall(query)}
 
-    blocks = re.split(r"\n\n+", context.strip())
-    scored: List[tuple] = []
-    for block in blocks:
-        m = re.match(r"^\[(\d+)\]", block)
-        cite = f"[{m.group(1)}]" if m else ""
-        body = re.sub(r"^\[\d+\][^\n]*\n", "", block, count=1)
-        for sent in _SENTENCE_SPLIT.split(body):
-            sent = sent.strip()
-            if len(sent) < 20:
-                continue
-            score = _score_sentence(sent, q_terms)
-            if score > 0:
-                scored.append((score, sent, cite))
+    blocks = _split_blocks(context)
+    qualitative = any(k in ql for k in _QUALITATIVE)
 
-    scored.sort(reverse=True, key=lambda x: x[0])
-    top = scored[:4]
+    # Quantitative + a deterministic DB answer -> answer directly.
+    if primary_answer and not qualitative:
+        cite = _relational_cite(blocks)
+        return f"{primary_answer} {cite}".strip()
+
+    top = _collect_sentences(blocks, q_terms)[:4]
 
     if not top:
+        if primary_answer:
+            cite = _relational_cite(blocks)
+            return f"{primary_answer} {cite}".strip()
         return ("I don't have enough information in the indexed knowledge "
                 "base to answer that confidently.")
 
-    bullets = [f"- {sent} {cite}".strip() for _, sent, cite in top]
-    summary = (
-        f"Based on the indexed financial documents, here is what is supported "
-        f"by the retrieved context for: \"{query}\".\n\n"
-        + "\n".join(bullets)
-    )
-    return summary
+    if any(k in ql for k in _LIST_INTENT):
+        lead = None
+        if "risk" in ql:
+            lead = "The key risk factors are:"
+        elif any(k in ql for k in ("outlook", "guidance", "macro")):
+            lead = "Here is the outlook:"
+        body = "\n".join(f"- {sent} {cite}".strip() for _, sent, cite in top)
+        answer = f"{lead}\n{body}" if lead else body
+    else:
+        answer = " ".join(f"{sent} {cite}".strip() for _, sent, cite in top)
+
+    # For qualitative questions the narrative is the answer; only lead with the
+    # database figure when it is a single concise fact (not a verbose row dump).
+    if primary_answer and len(primary_answer) <= 160 and ";" not in primary_answer:
+        cite = _relational_cite(blocks)
+        answer = f"{primary_answer} {cite}\n\n{answer}".strip()
+    return answer
 
 
 # --------------------------------------------------------------------------- #
@@ -247,8 +321,14 @@ def generate_rag_response(
     user_query: str,
     retrieved_context: str,
     provider_override: Optional[str] = None,
+    primary_answer: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Return ``{"answer", "provider_used", "providers_tried"}``."""
+    """Return ``{"answer", "provider_used", "providers_tried"}``.
+
+    ``primary_answer`` is an optional pre-computed natural-language answer from
+    the relational database. It is used by the offline simulation provider so
+    quantitative questions resolve to a clean, direct sentence.
+    """
     settings = get_settings()
     order: List[str] = []
     primary = (provider_override or settings.primary_provider or "simulation").lower()
@@ -262,7 +342,10 @@ def generate_rag_response(
     for p in order:
         tried.append(p)
         try:
-            answer = _PROVIDERS[p](user_query, retrieved_context)
+            if p == "simulation":
+                answer = _simulate(user_query, retrieved_context, primary_answer=primary_answer)
+            else:
+                answer = _PROVIDERS[p](user_query, retrieved_context)
         except Exception as exc:
             log.warning("provider raised", extra={"provider": p, "error": str(exc)})
             answer = None
