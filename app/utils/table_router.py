@@ -17,6 +17,7 @@ Pipeline
 """
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -144,6 +145,85 @@ _RATIO_METRICS = {
 }
 
 
+_VOCAB: Optional[set] = None
+
+
+def _build_vocab() -> set:
+    """Domain vocabulary used to spell-correct misspelled query words.
+
+    Drawn from metric phrases, schema keyword aliases, sector names and the
+    company-name tokens so that routing-critical words ("revenue", "companies",
+    "margin", ...) can be recovered from typos before table selection runs.
+    """
+    global _VOCAB
+    if _VOCAB is not None:
+        return _VOCAB
+    _load_lookups()
+    vocab: set = set()
+
+    def add_phrase(phrase: str) -> None:
+        for w in re.findall(r"[a-z]{3,}", phrase.lower()):
+            vocab.add(w)
+
+    for phrases in list(_FS_METRICS.values()) + list(_RATIO_METRICS.values()):
+        for p in phrases:
+            add_phrase(p)
+    try:
+        for aliases in schema_catalog.keyword_alias_map().values():
+            for a in aliases:
+                add_phrase(a)
+    except Exception:  # pragma: no cover - defensive
+        pass
+    for alias in _SECTOR_ALIASES:
+        add_phrase(alias)
+    for s in (_SECTOR_NAMES or []):
+        add_phrase(s)
+    vocab.update(_NAME_TOKENS or {})
+    # Structural words that steer routing / ranking / shape of the answer.
+    vocab.update({
+        "company", "companies", "highest", "lowest", "revenue", "profit",
+        "margin", "margins", "income", "compare", "comparison", "employee",
+        "employees", "earnings", "sector", "sectors", "industry", "industries",
+        "segment", "segments", "executive", "executives", "founded", "assets",
+        "liabilities", "growth", "list", "names", "biggest", "largest",
+        "smallest", "performance", "quarter", "dividend", "surprise",
+    })
+    _VOCAB = vocab
+    return vocab
+
+
+def reset_vocab() -> None:
+    global _VOCAB
+    _VOCAB = None
+
+
+def correct_spelling(query: str) -> str:
+    """Return ``query`` with obvious misspellings of domain terms repaired.
+
+    Each word that is not already a known term is replaced by its closest
+    domain-vocabulary match when the similarity is high; valid tickers and
+    short/common words are left untouched.
+    """
+    vocab = _build_vocab()
+    vocab_list = list(vocab)
+    tickers = _TICKERS or set()
+
+    def repl(m: "re.Match") -> str:
+        word = m.group(0)
+        low = word.lower()
+        if len(low) < 4 or low in vocab or word.upper() in tickers:
+            return word
+        # Leave correctly-spelled plurals of known terms alone.
+        if low.endswith("es") and low[:-2] in vocab:
+            return word
+        if low.endswith("s") and low[:-1] in vocab:
+            return word
+        match = difflib.get_close_matches(low, vocab_list, n=1, cutoff=0.82)
+        return match[0] if match else word
+
+    return re.sub(r"[A-Za-z]{2,}", repl, query)
+
+
 def _resolve_companies(query: str) -> List[str]:
     _load_lookups()
     found: List[str] = []
@@ -199,6 +279,34 @@ def _detect_metric(query: str, mapping: Dict[str, List[str]]) -> Optional[str]:
 def _detect_quarter(query: str) -> Optional[str]:
     m = re.search(r"\bq([1-4])\b", query, re.IGNORECASE)
     return f"Q{m.group(1)}" if m else None
+
+
+_WORD_NUMBERS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+
+
+def _detect_limit(query: str, default: int = 5) -> int:
+    """Extract a requested result count (e.g. "top 3", "first five").
+
+    Falls back to ``default`` when the question does not specify a count.
+    """
+    low = query.lower()
+    num = r"(\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)"
+    m = re.search(rf"\b(?:top|first|bottom|last|highest|lowest|best|worst)\s+{num}\b", low)
+    if not m:
+        m = re.search(rf"\b{num}\s+(?:companies|company|stocks|firms|names|results|segments)\b", low)
+    if m:
+        token = m.group(1)
+        n = int(token) if token.isdigit() else _WORD_NUMBERS.get(token, 0)
+        if 1 <= n <= 50:
+            return n
+    # Singular superlative phrasing ("which company has the highest ...") wants
+    # a single result rather than the default list.
+    if re.search(r"\b(which|what)\s+company\b", low) or re.search(r"\bthe\s+company\s+with\b", low):
+        return 1
+    return default
 
 
 def _sql_str_list(values: List[str]) -> str:
@@ -290,7 +398,7 @@ def _template_sql(query: str, primary: str) -> Optional[str]:
         if where:
             sql += " WHERE " + " AND ".join(where)
         if not tickers:
-            sql += f" ORDER BY r.{metric} {direction or 'DESC'} LIMIT 5"
+            sql += f" ORDER BY r.{metric} {direction or 'DESC'} LIMIT {_detect_limit(query)}"
         return sql
 
     if primary == "financial_statements":
@@ -315,7 +423,7 @@ def _template_sql(query: str, primary: str) -> Optional[str]:
         if where:
             sql += " WHERE " + " AND ".join(where)
         if not tickers and metric:
-            sql += f" ORDER BY s.{metric} {direction or 'DESC'} LIMIT 5"
+            sql += f" ORDER BY s.{metric} {direction or 'DESC'} LIMIT {_detect_limit(query)}"
         return sql
 
     if primary == "companies":
@@ -380,7 +488,7 @@ def _template_sql(query: str, primary: str) -> Optional[str]:
         if where:
             sql += " WHERE " + " AND ".join(where)
         if not tickers:
-            sql += f" ORDER BY e.surprise_pct {direction or 'DESC'} LIMIT 5"
+            sql += f" ORDER BY e.surprise_pct {direction or 'DESC'} LIMIT {_detect_limit(query)}"
         else:
             sql += " ORDER BY e.report_date"
         return sql
@@ -478,6 +586,9 @@ def answer_structured(
     provider_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Select tables, build + run SQL, and return rows with diagnostics."""
+    # Repair obvious typos first so misspellings ("revenuge", "comapanies")
+    # still route to the correct table and SQL template.
+    query = correct_spelling(query)
     selection = select_tables(query, top_k=top_k_tables)
     selected = selection["selected"]
 

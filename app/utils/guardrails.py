@@ -15,6 +15,7 @@ reviewers, so we enforce four guardrails out-of-the-box:
 """
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -73,6 +74,10 @@ _FINANCIAL_KEYWORDS = {
 }
 
 
+# Keywords long enough to fuzzy-match reliably against a typo'd word.
+_FUZZY_KEYWORDS = [kw for kw in _FINANCIAL_KEYWORDS if len(kw) >= 4]
+
+
 def _looks_financial(query: str) -> bool:
     q = query.lower()
     if any(kw in q for kw in _FINANCIAL_KEYWORDS):
@@ -80,6 +85,12 @@ def _looks_financial(query: str) -> bool:
     # Capitalised tickers (≥ 2 letters) count as financial intent.
     if re.search(r"\b[A-Z]{2,5}\b", query):
         return True
+    # Typo tolerance: accept the query if any word is a near-miss of a known
+    # financial keyword (e.g. "revenuge" -> "revenue", "comapanies" ->
+    # "companies"). This keeps simple misspellings from being refused.
+    for tok in re.findall(r"[a-z]{4,}", q):
+        if difflib.get_close_matches(tok, _FUZZY_KEYWORDS, n=1, cutoff=0.82):
+            return True
     return False
 
 

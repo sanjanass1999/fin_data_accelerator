@@ -52,6 +52,34 @@ function Badge({ children, color }) {
   return <span className={`px-4 py-2 text-xl font-bold rounded-full border-2 shadow-sm ${map[color] || map.slate}`}>{children}</span>;
 }
 
+function CopyButton({ text, label, light }) {
+  const [done, setDone] = useState(false);
+  const copy = async (e) => {
+    e.stopPropagation();
+    const value = text || '';
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = value;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+    }
+    setDone(true);
+    setTimeout(() => setDone(false), 1500);
+  };
+  return (
+    <button onClick={copy} title="Copy to clipboard"
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-base font-bold transition active:scale-95 ${light ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200'}`}>
+      {done ? '✓ Copied' : (label || 'Copy')}
+    </button>
+  );
+}
+
 function Metric({ label, value, color, sub }) {
   const pct = Math.round((value || 0) * 100);
   const bar = { green: 'bg-emerald-500', blue: 'bg-blue-500', indigo: 'bg-indigo-500', amber: 'bg-amber-500' }[color] || 'bg-slate-500';
@@ -141,10 +169,16 @@ function ChatTab() {
                 'bg-white border-slate-200 text-slate-800 font-medium'}`}>
                 {m.role === 'blocked' && <div className="text-lg font-black uppercase mb-2 tracking-wider text-rose-700 flex items-center gap-2">⚠️ Guardrail blocked · {m.rule}</div>}
                 <div className="whitespace-pre-wrap">{m.text}</div>
+                {m.role === 'user' && (
+                  <div className="mt-3 flex justify-end">
+                    <CopyButton text={m.text} light />
+                  </div>
+                )}
                 {m.role === 'ai' && (
                   <div className="mt-4 flex flex-wrap gap-2.5 items-center">
                     {typeof m.provider === 'string' && <Badge color="slate">via {m.provider}</Badge>}
                     {typeof m.grounded === 'number' && <Badge color={m.grounded > 0.4 ? 'green' : 'amber'}>grounding {Math.round(m.grounded * 100)}%</Badge>}
+                    <CopyButton text={m.text} label="Copy answer" />
                   </div>
                 )}
                 {m.sources && m.sources.length > 0 && (
