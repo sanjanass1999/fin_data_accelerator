@@ -15,6 +15,7 @@ not supported.
 """
 from __future__ import annotations
 
+import json
 import re
 import textwrap
 from typing import Any, Dict, List, Optional
@@ -467,3 +468,83 @@ def generate_sql(
             return {"sql": sql, "provider_used": p, "providers_tried": tried}
 
     return {"sql": None, "provider_used": "none", "providers_tried": tried}
+
+
+# --------------------------------------------------------------------------- #
+# NL -> QuerySpec (structured planning)
+# --------------------------------------------------------------------------- #
+
+
+QUERY_SPEC_SYSTEM_PROMPT = textwrap.dedent(
+    """
+    You translate a financial question into a STRICT JSON query plan. Output
+    ONLY a JSON object (no prose, no markdown fences) with these keys:
+
+      intent:      one of "list","rank","compare","aggregate","lookup"
+      entities:    array of stock tickers in UPPERCASE (e.g. ["AAPL","MSFT"]) or []
+      metric:      one canonical column name or null. Allowed:
+                   revenue, net_income, operating_income, gross_profit,
+                   total_assets, total_liabilities, free_cash_flow, capex,
+                   net_profit_margin_pct, operating_margin_pct, gross_margin_pct,
+                   debt_to_assets_pct, roe_pct, segment_revenue, yoy_growth_pct,
+                   eps_actual, eps_estimate, revenue_actual, surprise_pct
+      dimension:   one of "fiscal_year","segment_name","sector_name",
+                   "industry_name","fiscal_quarter" or null (a breakdown axis)
+      aggregation: one of "avg","sum","count" or null
+      direction:   "DESC" for highest/top/best, "ASC" for lowest/worst, else null
+      year:        integer fiscal year filter or null
+      quarter:     e.g. "Q3" or null
+      sector:      a sector name filter or null
+      limit:       integer result count (e.g. top 3 -> 3) or null
+
+    Rules:
+    - Pick the single most relevant metric. Superlatives ("highest","best")
+      set direction, not aggregation.
+    - "average"/"mean" -> aggregation "avg"; "total of"/"combined" -> "sum";
+      "how many"/"count" -> "count".
+    - Resolve company names to their ticker in entities.
+    """
+).strip()
+
+
+def _extract_json(raw: str) -> Optional[Dict[str, Any]]:
+    if not raw:
+        return None
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", raw, re.IGNORECASE | re.DOTALL)
+    candidate = fenced.group(1) if fenced else raw
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        obj = json.loads(candidate[start:end + 1])
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        return None
+
+
+def generate_query_spec(
+    query: str,
+    provider_override: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Ask the configured LLM for a structured QuerySpec (JSON), or ``None``.
+
+    Returns ``None`` offline / without API keys so the planner falls back to its
+    deterministic extractor.
+    """
+    settings = get_settings()
+    primary = (provider_override or settings.primary_provider or "").lower()
+    fallback = (settings.fallback_provider or "").lower()
+
+    order: List[str] = []
+    for p in (primary, fallback):
+        if p in ("groq", "gemini", "ollama") and p not in order:
+            order.append(p)
+
+    user_prompt = f"QUESTION: {query}\n\nJSON QUERY PLAN:"
+    for p in order:
+        raw = _provider_complete(p, QUERY_SPEC_SYSTEM_PROMPT, user_prompt)
+        obj = _extract_json(raw or "")
+        if obj is not None:
+            return obj
+    return None

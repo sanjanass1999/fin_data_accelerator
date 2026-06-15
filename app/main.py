@@ -202,6 +202,11 @@ def chat(payload: QueryRequest):
         # All SQL/table telemetry is kept out of this text and surfaced
         # separately under "routing" so the answer itself stays readable.
         db_answer = table_router.rows_to_answer(routed, query=payload.user_query)
+        # An honest data-coverage caveat (e.g. only FY2024 available) is
+        # prepended so it appears in the answer instead of fabricating data.
+        coverage_note = routed.get("coverage_note")
+        if coverage_note:
+            db_answer = f"{coverage_note} {db_answer}".strip() if db_answer else coverage_note
         sql_passage = {
             "text": db_answer or "The database returned no matching rows for this query.",
             "score": 1.0,
@@ -249,6 +254,8 @@ def chat(payload: QueryRequest):
                 "sql_provider": routed["sql_provider"],
                 "rows": routed["rows"],
                 "row_count": routed["row_count"],
+                "query_spec": routed.get("query_spec"),
+                "coverage_note": routed.get("coverage_note"),
             },
             "sources": [
                 {

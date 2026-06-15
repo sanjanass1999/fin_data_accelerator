@@ -60,9 +60,12 @@ _NAME_STOPWORDS = {
     "plc", "group", "the", "and", "platforms", "communications", "holdings",
     "ltd", "limited", "international", "& co.", "&",
     # Generic corporate descriptors that appear inside many company names and
-    # must not be treated as a ticker match (e.g. "list the companies").
+    # must not be treated as a ticker match (e.g. "list the companies",
+    # "business segments").
     "technologies", "systems", "services", "industries", "motors", "stores",
     "products", "solutions", "enterprises", "brands", "partners", "global",
+    "business", "machines", "advanced", "micro", "devices", "chemicals",
+    "general", "electric", "american", "wholesale",
 }
 
 _SECTOR_ALIASES = {
@@ -586,14 +589,34 @@ def answer_structured(
     provider_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Select tables, build + run SQL, and return rows with diagnostics."""
+    from app.utils import query_planner
+
     # Repair obvious typos first so misspellings ("revenuge", "comapanies")
     # still route to the correct table and SQL template.
     query = correct_spelling(query)
     selection = select_tables(query, top_k=top_k_tables)
     selected = selection["selected"]
 
-    build = build_sql(query, selected, provider_override=provider_override)
-    sql_text = build.get("sql")
+    # 1) Try the structured QuerySpec planner (owns quantitative/metric queries).
+    spec = query_planner.plan(query, provider_override=provider_override)
+    coverage_note: Optional[str] = None
+    sql_text: Optional[str] = None
+    strategy: Optional[str] = None
+    provider_used: Optional[str] = None
+    if spec is not None:
+        spec, coverage_note = query_planner.check_coverage(spec)
+        sql_text = query_planner.compile_spec(spec)
+        if sql_text:
+            strategy = f"planner:{spec.source}"
+            provider_used = spec.source
+
+    # 2) Fall back to the LLM / deterministic templates for everything else
+    #    (listings, executives, sectors, risk factors, macro, ...).
+    if not sql_text:
+        build = build_sql(query, selected, provider_override=provider_override)
+        sql_text = build.get("sql")
+        strategy = build.get("strategy")
+        provider_used = build.get("provider_used")
 
     rows: List[Dict[str, Any]] = []
     executed_sql: Optional[str] = None
@@ -609,11 +632,13 @@ def answer_structured(
         "selected_tables": selected,
         "ranked_tables": selection["ranked"],
         "sql": executed_sql or sql_text,
-        "sql_strategy": build.get("strategy"),
-        "sql_provider": build.get("provider_used"),
+        "sql_strategy": strategy,
+        "sql_provider": provider_used,
         "rows": rows,
         "row_count": len(rows),
         "error": error,
+        "coverage_note": coverage_note,
+        "query_spec": query_planner.spec_to_dict(spec),
     }
 
 
@@ -691,6 +716,40 @@ def _metric_pairs(row: Dict[str, Any]) -> List[Tuple[str, str]]:
     return pairs
 
 
+# Dimension columns that should appear in the label (a breakdown axis).
+_DIMENSION_KEYS = ("fiscal_year", "fiscal_quarter", "segment_name",
+                   "sector_name", "industry_name", "name")
+
+
+def _compose_label(row: Dict[str, Any]) -> Optional[str]:
+    """Build a row label that includes any breakdown dimension.
+
+    Examples: "Amazon.com Inc. (AMZN) - Online Stores", "FY2024", "Technology".
+    """
+    name = row.get("company_name")
+    ticker = row.get("ticker")
+    if name and ticker:
+        company = f"{name} ({ticker})"
+    elif name:
+        company = str(name)
+    elif ticker:
+        company = str(ticker)
+    else:
+        company = None
+
+    dims: List[str] = []
+    for key in _DIMENSION_KEYS:
+        val = row.get(key)
+        if val in (None, ""):
+            continue
+        dims.append(f"FY{val}" if key == "fiscal_year" else str(val))
+    dim = " ".join(dims) if dims else None
+
+    if company and dim:
+        return f"{company} - {dim}"
+    return company or dim
+
+
 def _join_clauses(items: List[str]) -> str:
     items = [i for i in items if i]
     if not items:
@@ -713,7 +772,7 @@ def rows_to_answer(result: Dict[str, Any], query: Optional[str] = None) -> Optio
     if not rows:
         return None
 
-    labeled_all = [(_row_label(r), _metric_pairs(r)) for r in rows]
+    labeled_all = [(_compose_label(r), _metric_pairs(r)) for r in rows]
 
     # Pure listing: rows carry only identifiers (e.g. "list the companies").
     # Return a clean enumeration of names rather than key=value clauses.
@@ -729,9 +788,15 @@ def rows_to_answer(result: Dict[str, Any], query: Optional[str] = None) -> Optio
     if not per_row:
         return None
 
-    # Optional fiscal-year context when every row shares the same year.
+    # Optional fiscal-year context when every row shares the same year and the
+    # year is not already carried in the per-row label (no other breakdown).
+    has_dimension = any(
+        any(r.get(k) not in (None, "") for k in ("segment_name", "sector_name",
+                                                 "industry_name", "fiscal_quarter"))
+        for r in rows
+    )
     years = {r.get("fiscal_year") for r in rows if r.get("fiscal_year")}
-    year_prefix = f"In FY{next(iter(years))}, " if len(years) == 1 else ""
+    year_prefix = f"In FY{next(iter(years))}, " if (len(years) == 1 and not has_dimension) else ""
 
     # Case A: a single shared metric across all rows -> a comparison sentence.
     metric_labels = {tuple(label for label, _ in pairs) for _, pairs in per_row}
@@ -743,13 +808,15 @@ def rows_to_answer(result: Dict[str, Any], query: Optional[str] = None) -> Optio
         if len(per_row) == 1:
             label, pairs = per_row[0]
             value = pairs[0][1]
-            who = label or "The company"
-            return f"{year_prefix}{who} has a {metric} of {value}.".strip()
+            if label:
+                return f"{year_prefix}{label} has a {metric} of {value}.".strip()
+            return f"{year_prefix}The {metric} is {value}.".strip()
         clauses = [
             f"{label or 'company'} {pairs[0][1]}" for label, pairs in per_row
         ]
         heading = metric[0].upper() + metric[1:]
-        return f"{year_prefix}{heading} by company: {_join_clauses(clauses)}.".strip()
+        connector = ":" if has_dimension else " by company:"
+        return f"{year_prefix}{heading}{connector} {_join_clauses(clauses)}.".strip()
 
     # Case B: general multi-metric rows -> one clause per row.
     clauses = []
