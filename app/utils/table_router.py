@@ -55,9 +55,13 @@ _NAME_TOKENS: Optional[Dict[str, str]] = None
 _SECTOR_NAMES: Optional[List[str]] = None
 
 _NAME_STOPWORDS = {
-    "inc", "incorporated", "corporation", "corp", "company", "co", "plc",
-    "group", "the", "and", "platforms", "communications", "holdings", "ltd",
-    "limited", "international", "& co.", "&",
+    "inc", "incorporated", "corporation", "corp", "company", "companies", "co",
+    "plc", "group", "the", "and", "platforms", "communications", "holdings",
+    "ltd", "limited", "international", "& co.", "&",
+    # Generic corporate descriptors that appear inside many company names and
+    # must not be treated as a ticker match (e.g. "list the companies").
+    "technologies", "systems", "services", "industries", "motors", "stores",
+    "products", "solutions", "enterprises", "brands", "partners", "global",
 }
 
 _SECTOR_ALIASES = {
@@ -315,15 +319,32 @@ def _template_sql(query: str, primary: str) -> Optional[str]:
         return sql
 
     if primary == "companies":
-        if re.search(r"\bhow many\b", query.lower()) and not tickers:
+        low = query.lower()
+        if re.search(r"\bhow many\b", low) and not tickers:
             return "SELECT COUNT(*) AS company_count FROM companies"
-        sql = (
-            "SELECT c.ticker, c.company_name, c.hq_country, c.employees, "
-            "c.founded_year, i.industry_name, sec.sector_name "
-            "FROM companies c "
-            "JOIN industries i ON c.industry_id = i.industry_id "
-            "JOIN sectors sec ON i.sector_id = sec.sector_id"
-        )
+        # Select only the attributes the question actually asks about; default
+        # to just the company name so "list the companies" stays a clean list
+        # instead of dumping employees / HQ / founding year for every row.
+        cols = ["c.company_name", "c.ticker"]
+        if re.search(r"employee|headcount|staff|workforce", low):
+            cols.append("c.employees")
+        if re.search(r"found|establish|how old", low):
+            cols.append("c.founded_year")
+        if re.search(r"headquarter|\bhq\b|country|located", low):
+            cols.append("c.hq_country")
+        need_industry = bool(re.search(r"industry|industries", low))
+        need_sector = bool(re.search(r"sector", low))
+        if need_industry:
+            cols.append("i.industry_name")
+        if need_sector:
+            cols.append("sec.sector_name")
+        use_join = need_industry or need_sector or bool(sector)
+        sql = f"SELECT {', '.join(cols)} FROM companies c"
+        if use_join:
+            sql += (
+                " JOIN industries i ON c.industry_id = i.industry_id "
+                "JOIN sectors sec ON i.sector_id = sec.sector_id"
+            )
         where = []
         if ticker_filter:
             where.append(ticker_filter)
@@ -331,6 +352,7 @@ def _template_sql(query: str, primary: str) -> Optional[str]:
             where.append(f"sec.sector_name = '{sector}'")
         if where:
             sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY c.company_name"
         return sql
 
     if primary == "business_segments":
@@ -452,7 +474,7 @@ def build_sql(query: str, selected: List[str], provider_override: Optional[str] 
 def answer_structured(
     query: str,
     top_k_tables: int = 4,
-    row_limit: int = 50,
+    row_limit: int = 100,
     provider_override: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Select tables, build + run SQL, and return rows with diagnostics."""
@@ -580,13 +602,24 @@ def rows_to_answer(result: Dict[str, Any], query: Optional[str] = None) -> Optio
     if not rows:
         return None
 
-    per_row = [(_row_label(r), _metric_pairs(r)) for r in rows[:25]]
-    per_row = [(label, pairs) for label, pairs in per_row if pairs]
+    labeled_all = [(_row_label(r), _metric_pairs(r)) for r in rows]
+
+    # Pure listing: rows carry only identifiers (e.g. "list the companies").
+    # Return a clean enumeration of names rather than key=value clauses.
+    if all(not pairs for _, pairs in labeled_all):
+        names = [lbl for lbl, _ in labeled_all if lbl][:100]
+        if not names:
+            return None
+        prefix = f"{len(names)} companies: " if len(names) > 3 else ""
+        return f"{prefix}{_join_clauses(names)}.".strip()
+
+    # Metric rows (already bounded by the SQL row limit upstream).
+    per_row = [(label, pairs) for label, pairs in labeled_all if pairs]
     if not per_row:
         return None
 
     # Optional fiscal-year context when every row shares the same year.
-    years = {r.get("fiscal_year") for r in rows[:25] if r.get("fiscal_year")}
+    years = {r.get("fiscal_year") for r in rows if r.get("fiscal_year")}
     year_prefix = f"In FY{next(iter(years))}, " if len(years) == 1 else ""
 
     # Case A: a single shared metric across all rows -> a comparison sentence.
