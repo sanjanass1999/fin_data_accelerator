@@ -251,8 +251,16 @@ def chat(payload: QueryRequest):
                 "row_count": routed["row_count"],
             },
             "sources": [
-                {"text": p["text"], "score": p["score"], "source": p["source"],
-                 "metadata": p.get("metadata", {})}
+                {
+                    "text": p["text"],
+                    "score": p["score"],
+                    "source": p["source"],
+                    "metadata": p.get("metadata", {}),
+                    "id": p.get("id"),
+                    "raw_similarity": p.get("raw_similarity"),
+                    "keyword_boost": p.get("keyword_boost"),
+                    "retriever": "relational_db" if p["source"] == "relational_db" else "chromadb",
+                }
                 for p in passages
             ],
             "output_guardrail": {
