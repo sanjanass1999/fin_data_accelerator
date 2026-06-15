@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 
 from app.agents.state import PipelineState
 from app.logging_config import get_logger
+from app.utils.chunking import chunk_text
 
 log = get_logger("agent.transform")
 
@@ -115,7 +116,7 @@ def transform_agent(state: PipelineState) -> dict:
             page = (page or "").strip()
             if not page:
                 continue
-            for chunk in _chunk_text(page):
+            for chunk in chunk_text(page):
                 narratives.append(chunk)
                 meta.append({
                     "source": state.get("file_path", "unstructured"),
@@ -151,20 +152,3 @@ def transform_agent(state: PipelineState) -> dict:
         "next_node": "end",
         **_trace(state, started, "failed", f"unknown file_type {file_type}"),
     }
-
-
-def _chunk_text(text: str, target: int = 600, overlap: int = 80) -> List[str]:
-    text = " ".join(text.split())
-    if len(text) <= target:
-        return [text]
-    chunks: List[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + target, len(text))
-        if end < len(text):
-            cut = text.rfind(". ", start + 100, end)
-            if cut != -1:
-                end = cut + 1
-        chunks.append(text[start:end].strip())
-        start = max(end - overlap, end)
-    return [c for c in chunks if c]

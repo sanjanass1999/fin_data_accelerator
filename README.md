@@ -48,8 +48,10 @@ A production-grade reference implementation of a **multi-agent Gen AI data accel
 | Heterogeneous data | Polymorphic ingestion (CSV / Parquet / PDF / JSON / inline text) |
 | Structured, queryable source | Normalized **SQLite relational DB** (11 tables, real PK/FK) as the source of truth |
 | Automatic table selection | Schema-aware **table router**: semantic match over embedded schema cards + keyword/alias boost, no manual routing |
+| Structured query planning | A typed **QuerySpec planner** turns a question into intent/metric/dimension/aggregation/`spread` before compiling SQL, with a **coverage guard** that rewrites impossible asks (e.g. cross-year on single-year data) and an honest note instead of fabricating |
 | Precise factual answers | NL2SQL over the chosen tables -> validated, read-only `SELECT` -> answer grounded in exact rows |
 | Robust retrieval | sentence-transformer embeddings + Chroma + MMR re-rank + keyword boost (for qualitative questions) |
+| Content-aware chunking | Hybrid strategy: structured records indexed whole (one row -> one chunk); long-form prose split with a sentence-aware, overlapping chunker |
 | Hallucination control | System-prompt grounding **+** input guardrails **+** output guardrails **+** citation enforcement |
 | Cost + latency | Provider router (Groq fast, Ollama local, Gemini fallback) with simulation mode for offline demos |
 | Enterprise data access | MCP server exposes `fs / pg / sql / s3` tools with allowlists and audit log |
@@ -90,6 +92,84 @@ tables + generated SQL without running the answer LLM). Key modules:
 [`app/schema_catalog.py`](app/schema_catalog.py),
 [`app/utils/sql_db.py`](app/utils/sql_db.py),
 [`app/utils/table_router.py`](app/utils/table_router.py).
+
+---
+
+## Structured query planner (QuerySpec)
+
+For quantitative/metric questions the router does not jump straight to raw SQL.
+It first builds a typed **`QuerySpec`** — an intermediate representation that
+separates *understanding* the question from *generating* SQL
+([`app/utils/query_planner.py`](app/utils/query_planner.py)):
+
+```
+question
+   |
+   v
+[ plan ]            LLM-produced spec (when a provider is set) OR a deterministic
+   |                offline extractor -> QuerySpec{intent, metric, dimension,
+   |                aggregation, operation, year, sector, direction, limit, ...}
+   v
+[ check_coverage ]  rewrite the spec to what the data can actually support
+   |                (e.g. only FY2024 exists) and attach an honest note instead
+   |                of fabricating an answer
+   v
+[ compile_spec ]    emit a single, always-valid SELECT with correct columns,
+   |                JOINs, GROUP BY / ORDER BY / LIMIT
+   v
+validated read-only SELECT  ->  exact rows
+```
+
+This makes the SQL match the actual intent. For example, *"difference between
+the most profitable and the least profitable company in 2024"* compiles to a
+`MAX(net_income) - MIN(net_income)` **spread** query (naming both companies),
+rather than a top-5 revenue ranking. Superlatives map to `direction`,
+"average"/"total" map to `aggregation`, and "profitable/profitability" map to
+`net_income`. Qualitative questions (risk factors, executives, sectors, ...)
+fall through to the deterministic templates in `table_router`.
+
+The `/api/v1/chat` response surfaces the planner's decisions via
+`query_spec`, `sql_strategy`, `generated_sql`, and any `coverage_note`.
+
+---
+
+## Chunking strategy (RAG knowledge base)
+
+The knowledge base holds two very different kinds of content, so the platform
+uses a deliberate **hybrid chunking** approach
+([`app/utils/chunking.py`](app/utils/chunking.py)):
+
+| Content | Strategy | Why |
+|---|---|---|
+| Per-company financial narratives (one company-year) | **Record-based** — indexed whole, one row -> one chunk | Each is already a short, self-contained semantic unit; revenue, margin and assets for the same firm-year must stay together to retrieve and cite cleanly |
+| Per-table "schema cards" | **Document-level** — one card per table | The card *is* the unit used for semantic table selection |
+| Long-form `earnings_reports` + ingested PDF/TXT | **Sentence-aware recursive with overlap** (~600 chars, ~80-char overlap) | Prose needs splitting; keeping whole sentences and overlapping context preserves meaning across boundaries |
+
+### Why this combination
+
+- **Record-based for structured data** beats fixed-size windowing here: the
+  data is already row-shaped, so one row per chunk gives clean retrieval, exact
+  citations, and no severed facts.
+- **Sentence-aware + overlap for prose** avoids the two classic failure modes
+  of naive fixed-size chunking: cutting a sentence mid-thought, and losing a
+  fact that straddles a chunk boundary. The chunker packs whole sentences up to
+  the target size, carries a real character overlap into the next chunk, and
+  merges a tiny trailing remainder into the previous chunk.
+
+### Other strategies considered
+
+| Strategy | Trade-off / why not the default here |
+|---|---|
+| Fixed-size character windows | Simple but cuts mid-sentence and mid-word; hurts embedding quality |
+| Fixed-size with overlap (no boundaries) | Keeps context but still breaks sentences |
+| Recursive character splitting (LangChain-style) | Good general default; our sentence-aware packer is the focused subset that fits these clean financial documents |
+| Semantic / embedding-based chunking | Highest quality but slow and overkill for short, well-structured records |
+| Whole-record (no split) | Ideal for the structured narratives, impractical for long reports |
+
+The shared `chunk_text()` is used by both the offline seed script
+([`scripts/seed_data.py`](scripts/seed_data.py)) and the live transform agent
+([`app/agents/transform.py`](app/agents/transform.py)) so the two ingestion
+paths never drift.
 
 ---
 
@@ -167,17 +247,19 @@ app/
     state.py             TypedDict pipeline state
     ingestion.py         CSV / Parquet / PDF / JSON loader
     quality.py           Schema, completeness, type checks
-    transform.py         Margin, growth, ratios, narrative builder
+    transform.py         Margin, growth, ratios, narrative builder + prose chunking
     rag.py               Indexes narratives + chunks into ChromaDB
   utils/
     vector_store.py      Chroma client, MMR rerank, hybrid search
-    llm_service.py       Groq/Gemini/Ollama provider router + simulation
+    chunking.py          Hybrid chunking: record-based + sentence-aware overlap
+    llm_service.py       Groq/Gemini/Ollama provider router + simulation + NL2SQL/QuerySpec
     guardrails.py        Input + output safety
     evaluation.py        Faithfulness / relevancy / context precision
   schema_catalog.py      Natural-language catalog of every DB table (table routing + NL2SQL)
   utils/
     sql_db.py            Read-only SQLite access + safe SELECT-only validator
     table_router.py      Auto table selection + NL2SQL + deterministic fallback
+    query_planner.py     Typed QuerySpec planner + coverage guard + SQL compiler
   data/
     findata.db           SQLite relational DB (built from the CSVs below)
     relational/*.csv     Normalized per-table source (PK/FK): companies, sectors,
@@ -195,6 +277,9 @@ scripts/
 tests/
   test_agents.py
   test_rag.py
+  test_router.py         Table selection + safe-SQL + answer-accuracy
+  test_query_planner.py  QuerySpec extraction, SQL compilation, coverage, spread
+  test_chunking.py       Sentence-aware chunker (overlap, boundaries)
 .github/workflows/main.yml
 docker-compose.yml
 Dockerfile

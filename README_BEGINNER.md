@@ -56,6 +56,8 @@ That whole workflow is what this project automates.
 | **Relational database (SQLite)** | A database made of **tables** (like spreadsheets) that are **linked** to each other. Here it's a single file, `app/data/findata.db`, with no server to install. |
 | **Primary key / Foreign key** | A **primary key** is a column that uniquely identifies each row (e.g. `company_id`). A **foreign key** is a column in one table that points to another table's primary key (e.g. `financial_statements.company_id` points to `companies.company_id`). This is how tables are "related". |
 | **Table router** | The new "detective" that reads your question and decides **which table(s)** can answer it — then writes the database query for you. No manual table picking. |
+| **Query planner** | A second detective that figures out *what kind of math* your question needs (a single value, a ranking, an average, or the **difference between two extremes**) before any SQL is written, so the query matches what you actually meant. |
+| **Chunking** | Cutting long documents into bite-sized pieces before storing them in the AI memory, so search can return just the relevant part instead of a whole report. |
 | **SQL / NL2SQL** | **SQL** is the language used to ask a database for specific rows. **NL2SQL** ("natural language to SQL") means turning your plain-English question into a safe SQL query automatically. |
 | **Vector database (ChromaDB)** | A special database that stores text as numbers (embeddings) so it can find things by *meaning*. "net income" can match "profit" even though the words differ. |
 | **Embeddings** | The numeric fingerprint of a piece of text. Similar meaning → similar numbers. |
@@ -76,9 +78,10 @@ You ask a question in the dashboard
   [ Input guardrails ]  ── blocks PII, jailbreaks, off-topic questions
             |
             v
-  [ Table router ]      ── NEW: picks the right table(s), writes a safe SQL
-   (semantic + keyword)    query, and fetches the EXACT rows from the database
-            |
+  [ Table router ]      ── picks the right table(s), and the query planner
+   (+ query planner)       works out the metric + shape (value / ranking /
+            |              average / difference), writes a safe SQL query, and
+            |              fetches the EXACT rows from the database
             v
   [ Vector search ]     ── also finds relevant narrative notes in ChromaDB
    (semantic + keyword,    (for "summarise / explain" style questions),
@@ -211,6 +214,71 @@ Want to add or change data? Edit the CSVs (or re-generate them with
 `python scripts/generate_relational_csvs.py`), then re-run the two commands
 above. That's it.
 
+### 4.6 The query planner: understanding *what kind of answer* you want
+
+Picking the right table is only half the job. The system also has to understand
+**what you're actually asking it to compute**. A second helper — the **query
+planner** ([`app/utils/query_planner.py`](app/utils/query_planner.py)) — reads
+your question and fills in a little form (called a `QuerySpec`) before any SQL is
+written:
+
+- **What metric?** revenue, net income, profit margin, … ("profitable" /
+  "profitability" → net income)
+- **What shape of answer?** a single value, a ranking ("highest", "top 5"), an
+  average/total, or the **difference between two extremes** ("the gap between the
+  most and least profitable company")
+- **Any filters?** a specific year, a sector, particular companies
+
+Why this matters — a real example:
+
+> *"What is the difference between the most profitable and the least profitable
+> company in 2024?"*
+
+A naive system hears "most" and just lists the top companies by revenue. The
+planner instead recognises this as a **difference (spread)** question about
+**net income**, and writes SQL that computes
+`MAX(net_income) - MIN(net_income)` and names **both** companies — which is what
+you actually asked.
+
+The planner also has an **honesty guard**. If you ask something the data can't
+support — e.g. comparing *across years* when only one year is loaded — it doesn't
+make something up. It quietly adjusts the question to what's possible and adds a
+short note explaining what it did. In the chat response you can see all of this
+under `query_spec`, `generated_sql`, and `coverage_note`.
+
+### 4.7 Chunking: how long documents are filed into the AI memory
+
+When a document is too long to store as one piece, it has to be cut into smaller
+**chunks** before going into the vector database. How you cut matters a lot: cut
+in the wrong place and you split a fact in half, and search can no longer find
+it. This project uses **two strategies depending on the content**
+([`app/utils/chunking.py`](app/utils/chunking.py)):
+
+1. **Short, structured facts are kept whole.** Each company's one-paragraph
+   financial summary (revenue, margin, assets for a given year) is stored as a
+   **single chunk**. These facts belong together, so splitting them would only
+   hurt. (One row → one chunk. This is "record-based" chunking.)
+2. **Long reports are split sentence-by-sentence, with overlap.** The longer
+   earnings-report narratives are cut into ~600-character pieces, but **only at
+   sentence boundaries** (never mid-sentence), and each piece **repeats a little
+   of the previous piece's ending** (~80 characters of "overlap"). That overlap
+   means a fact sitting right on a boundary still shows up in the search results.
+
+```
+Long report:  "... sentence A. sentence B. sentence C. sentence D. sentence E ..."
+
+Chunk 1:      [ sentence A. sentence B. sentence C. ]
+Chunk 2:                      [ sentence C. sentence D. sentence E. ]   <- C repeats (overlap)
+```
+
+**Why this mix?** Financial records are already neat and self-contained, so
+keeping them whole gives the cleanest search and citations. Long prose needs
+splitting, and the sentence-aware-with-overlap approach avoids the two classic
+mistakes of naive chunking: chopping a sentence in half, and losing a fact that
+straddles a boundary. (Other approaches exist — fixed-size character windows,
+LangChain-style recursive splitting, or slow "semantic" chunking — but for this
+project's clean, mostly-structured data, the hybrid above is the best fit.)
+
 ---
 
 ## 5. Project structure
@@ -236,13 +304,15 @@ fin_data_accelerator/
 │   │   ├── state.py           # The shared "clipboard" passed between agents
 │   │   ├── ingestion.py       # Agent 1: reads CSV / Parquet / PDF / JSON / TXT
 │   │   ├── quality.py         # Agent 2: schema, completeness, type checks
-│   │   ├── transform.py       # Agent 3: margins, ratios, plain-English narratives
+│   │   ├── transform.py       # Agent 3: margins, ratios, narratives + prose chunking
 │   │   └── rag.py             # Agent 4: stores narratives into ChromaDB
 │   │
 │   ├── utils/
 │   │   ├── vector_store.py    # ChromaDB + semantic search + MMR re-rank + keyword boost
-│   │   ├── sql_db.py          # NEW: read-only SQLite access + safe SELECT-only validator
-│   │   ├── table_router.py    # NEW: picks the right table + writes/runs the SQL
+│   │   ├── chunking.py        # NEW: hybrid chunking (records whole + sentence-aware overlap)
+│   │   ├── sql_db.py          # read-only SQLite access + safe SELECT-only validator
+│   │   ├── table_router.py    # picks the right table + writes/runs the SQL
+│   │   ├── query_planner.py   # NEW: understands the question (metric/shape/difference) + honesty guard
 │   │   ├── llm_service.py     # Multi-provider LLM router + offline simulator + NL2SQL
 │   │   ├── guardrails.py      # Input & output safety checks
 │   │   └── evaluation.py      # RAGAS-style trust scores
@@ -269,7 +339,9 @@ fin_data_accelerator/
 └── tests/                     # pytest tests
     ├── test_agents.py
     ├── test_rag.py
-    └── test_router.py         # NEW: table-selection + safe-SQL + answer-accuracy tests
+    ├── test_router.py         # table-selection + safe-SQL + answer-accuracy tests
+    ├── test_query_planner.py  # NEW: question understanding + SQL compilation + difference/spread
+    └── test_chunking.py       # NEW: sentence-aware chunker (overlap + boundaries)
 ```
 
 ---

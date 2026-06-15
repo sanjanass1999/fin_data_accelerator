@@ -28,6 +28,7 @@ if PROJECT_ROOT not in sys.path:
 
 from app import schema_catalog  # noqa: E402
 from app.utils import sql_db  # noqa: E402
+from app.utils.chunking import chunk_text  # noqa: E402
 from app.utils.vector_store import (  # noqa: E402
     add_document_chunks,
     collection_stats,
@@ -60,21 +61,9 @@ def _company_narrative(row: Dict[str, Any]) -> str:
     )
 
 
-def _chunk(text: str, target: int = 600, overlap: int = 80) -> List[str]:
-    text = " ".join(text.split())
-    if len(text) <= target:
-        return [text]
-    chunks: List[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + target, len(text))
-        if end < len(text):
-            cut = text.rfind(". ", start + 100, end)
-            if cut != -1:
-                end = cut + 1
-        chunks.append(text[start:end].strip())
-        start = max(end - overlap, end)
-    return [c for c in chunks if c]
+# Long-form report prose is split with the shared sentence-aware chunker
+# (see app/utils/chunking.py). Per-company narratives are short, self-contained
+# records and are intentionally indexed whole (one row -> one chunk).
 
 
 # --------------------------------------------------------------------------- #
@@ -139,7 +128,7 @@ def seed(reset: bool = False) -> Dict[str, Any]:
     report_texts: List[str] = []
     report_meta: List[Dict[str, Any]] = []
     for r in report_rows:
-        for chunk in _chunk(r["content"]):
+        for chunk in chunk_text(r["content"]):
             report_texts.append(f"{r['title']}\n\n{chunk}")
             report_meta.append({
                 "source": "earnings_reports",
