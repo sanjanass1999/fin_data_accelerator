@@ -1,0 +1,107 @@
+<mxfile host="app.diagrams.net" version="24.0.0" type="device">
+  <diagram id="c2-container" name="C2 - Container">
+    <mxGraphModel dx="1300" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="FinDataAccelerator - C2 Container" style="text;html=1;align=center;verticalAlign=middle;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="20" width="360" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="user" value="Financial Analyst / User&#10;&#10;[Person]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08427b;fontColor=#ffffff;strokeColor=#073b6f;" vertex="1" parent="1">
+          <mxGeometry x="600" y="80" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="boundary" value="FinDataAccelerator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;verticalAlign=top;fontStyle=2;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="60" y="200" width="1280" height="740" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dashboard" value="Web Dashboard&#10;&#10;[Container: React SPA via CDN]&#10;Chat, Pipeline, Knowledge Base and MCP tabs (app/ui/dashboard.html)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#3c7fc0;" vertex="1" parent="1">
+          <mxGeometry x="600" y="240" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="api" value="API Gateway&#10;&#10;[Container: FastAPI / Uvicorn]&#10;/api/v1/* endpoints: chat, route, search, pipeline, evaluation, kb, mcp (app/main.py)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#3c7fc0;" vertex="1" parent="1">
+          <mxGeometry x="580" y="410" width="260" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="pipeline" value="Ingestion Pipeline&#10;&#10;[Container: LangGraph StateGraph]&#10;Ingestion -&gt; Quality -&gt; Transform -&gt; RAG agents (app/graph.py, app/agents/*)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#3c7fc0;" vertex="1" parent="1">
+          <mxGeometry x="100" y="400" width="240" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="queryengine" value="Query Engine&#10;&#10;[Container: Python]&#10;Table router + QuerySpec planner + NL2SQL + safe SELECT validation (table_router, query_planner, sql_db)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#3c7fc0;" vertex="1" parent="1">
+          <mxGeometry x="380" y="600" width="260" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="retrieval" value="Retrieval + Safety&#10;&#10;[Container: Python]&#10;Hybrid vector search + MMR, chunking, guardrails, RAGAS-style evaluation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#3c7fc0;" vertex="1" parent="1">
+          <mxGeometry x="700" y="600" width="260" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="llmrouter" value="LLM Router&#10;&#10;[Container: Python]&#10;Provider routing Groq -&gt; fallback -&gt; offline simulation (app/utils/llm_service.py)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#3c7fc0;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="410" width="240" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mcpserver" value="MCP Server&#10;&#10;[Container: Python, stdio]&#10;fs / pg / sql / s3 / kb tools with allowlists + audit log (app/mcp_server.py)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#438dd5;fontColor=#ffffff;strokeColor=#3c7fc0;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="600" width="240" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="chroma" value="Vector Store&#10;&#10;[Container: ChromaDB]&#10;Embedded financial narratives, report chunks and schema cards" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#2e6da4;fontColor=#ffffff;strokeColor=#27598a;boundedLbl=1;backgroundOutline=1;size=14;" vertex="1" parent="1">
+          <mxGeometry x="700" y="790" width="220" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sqlite" value="Relational DB&#10;&#10;[Container: SQLite findata.db]&#10;11 normalized tables (PK/FK), read-only access" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#2e6da4;fontColor=#ffffff;strokeColor=#27598a;boundedLbl=1;backgroundOutline=1;size=14;" vertex="1" parent="1">
+          <mxGeometry x="400" y="790" width="220" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="llm" value="LLM Providers&#10;&#10;[External System]&#10;Groq / Gemini / Ollama" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;fontColor=#ffffff;strokeColor=#6b6b6b;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="240" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sources" value="Data Sources&#10;&#10;[External System]&#10;CSV / Parquet / PDF / JSON / S3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#999999;fontColor=#ffffff;strokeColor=#6b6b6b;" vertex="1" parent="1">
+          <mxGeometry x="100" y="240" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="r1" value="Uses [HTTPS/JSON]" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="user" target="dashboard">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r2" value="API calls [REST]" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="dashboard" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r3" value="Runs file ingestion" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="api" target="pipeline">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r4" value="Routes &amp; answers questions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="api" target="queryengine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r5" value="Retrieves &amp; scores" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="api" target="retrieval">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r6" value="Generates SQL/answers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="api" target="llmrouter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r7" value="Reads (SELECT)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="queryengine" target="sqlite">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r8" value="Embeds &amp; searches" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="retrieval" target="chroma">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r9" value="Indexes chunks" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="pipeline" target="chroma">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r10" value="Calls [API]" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="llmrouter" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r11" value="Loads files" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="sources" target="pipeline">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r12" value="Read-only SELECT / kb.search" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;" edge="1" parent="1" source="mcpserver" target="sqlite">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r13" value="Uses planner/NL2SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;fontSize=11;dashed=1;" edge="1" parent="1" source="queryengine" target="llmrouter">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
